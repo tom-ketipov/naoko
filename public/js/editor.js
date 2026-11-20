@@ -80,7 +80,12 @@ export function mountEditor(root, { doc, navigate }) {
         </div>
         <div class="rail"></div>
         <div class="lamp" aria-hidden="true">
+          <div class="lamp-falloff"></div>
           <div class="lamp-cone"></div>
+          <div class="lamp-tint"></div>
+          <canvas class="lamp-motes" width="440" height="380"></canvas>
+          <div class="lamp-spill"></div>
+          <div class="lamp-bloom"></div>
           <div class="lamp-stem"></div>
           <div class="lamp-head"><i></i></div>
         </div>
@@ -111,6 +116,78 @@ export function mountEditor(root, { doc, navigate }) {
   const titleInput = $('.ed-title');
   const saveState = $('.save-state');
   const paper = new Paper($('.sheets'), settings);
+
+  /* ---------------------------------------------------------------- */
+  /* Dust drifting through the beam                                    */
+  /* ---------------------------------------------------------------- */
+  const motes = (() => {
+    const canvas = $('.lamp-motes');
+    const ctx = canvas.getContext('2d');
+    const W = 440;
+    const H = 380;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.scale(dpr, dpr);
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const SPREAD = Math.tan((26 * Math.PI) / 180); // beam half-angle
+    let rgb = [125, 155, 255];
+    let raf = 0;
+    let last = 0;
+    const spawn = (anywhere) => ({
+      x: W / 2 + (Math.random() - 0.5) * W * 0.9,
+      y: anywhere ? Math.random() * H : H + 4,
+      r: 0.35 + Math.random() * Math.random() * 1.5,
+      vx: (Math.random() - 0.5) * 4,
+      vy: -(1.5 + Math.random() * 5),
+      ph: Math.random() * Math.PI * 2,
+      tw: 0.4 + Math.random() * 1.4,
+    });
+    const dust = Array.from({ length: 46 }, () => spawn(true));
+
+    function frame(t) {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min(0.05, (t - (last || t)) / 1000);
+      last = t;
+      ctx.clearRect(0, 0, W, H);
+      for (const m of dust) {
+        // slow Brownian drift, warm air rising
+        m.vx += (Math.random() - 0.5) * 6 * dt;
+        m.vy += (Math.random() - 0.5) * 4 * dt;
+        m.vx *= 0.995;
+        m.x += m.vx * dt;
+        m.y += m.vy * dt;
+        m.ph += m.tw * dt;
+        if (m.y < -4 || m.x < -4 || m.x > W + 4) Object.assign(m, spawn(false));
+        const dy = H - m.y; // distance from the bulb
+        const half = 10 + dy * SPREAD;
+        const edge = Math.max(0, 1 - Math.abs(m.x - W / 2) / half);
+        if (!edge) continue;
+        const fall = 1 / (1 + (dy / 150) ** 2);
+        const a = edge * edge * (3 - 2 * edge) * fall * (0.55 + 0.45 * Math.sin(m.ph)) * 0.9;
+        if (a < 0.02) continue;
+        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    return {
+      setColor(r, g, b) {
+        // dust catches the light a little whiter than the beam itself
+        rgb = [r, g, b].map((c) => Math.round(c + (255 - c) * 0.45));
+      },
+      start() {
+        if (reduce || raf || document.hidden || view !== 'carriage') return;
+        last = 0;
+        raf = requestAnimationFrame(frame);
+      },
+      stop() {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      },
+    };
+  })();
 
   /* ---------------------------------------------------------------- */
   /* Rendering & geometry                                              */
@@ -216,6 +293,7 @@ export function mountEditor(root, { doc, navigate }) {
     const n = parseInt(hex.slice(1), 16);
     document.body.style.setProperty('--lamp', hex);
     document.body.style.setProperty('--lamp-rgb', `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`);
+    motes.setColor((n >> 16) & 255, (n >> 8) & 255, n & 255);
   }
 
   function lampSwatches(cur) {
@@ -748,6 +826,7 @@ export function mountEditor(root, { doc, navigate }) {
     } else measure();
     updateChrome();
     place('jump');
+    if (v === 'carriage') motes.start(); else motes.stop();
     focusKeys();
   }
 
@@ -892,7 +971,9 @@ export function mountEditor(root, { doc, navigate }) {
   /* Lifecycle                                                         */
   /* ---------------------------------------------------------------- */
   const onResize = () => { measure(); place('none'); };
-  const onVis = () => { if (document.visibilityState === 'hidden') flush(); };
+  const onVis = () => {
+    if (document.visibilityState === 'hidden') { flush(); motes.stop(); } else motes.start();
+  };
   window.addEventListener('resize', onResize);
   window.addEventListener('beforeunload', flush);
   document.addEventListener('visibilitychange', onVis);
@@ -907,6 +988,7 @@ export function mountEditor(root, { doc, navigate }) {
     scrollY = Math.max(0, Math.min(maxScroll(), y - geo.h * 0.4));
   }
   place('none');
+  motes.start();
   resetKeys();
   requestAnimationFrame(() => {
     focusKeys();
@@ -922,6 +1004,7 @@ export function mountEditor(root, { doc, navigate }) {
       destroyed = true;
       clearTimeout(queueTimer);
       closeLampPop();
+      motes.stop();
       document.body.style.removeProperty('--lamp');
       document.body.style.removeProperty('--lamp-rgb');
       window.removeEventListener('resize', onResize);

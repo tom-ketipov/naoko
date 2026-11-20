@@ -309,7 +309,7 @@ body.page-editor {
 .desk {
   position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: text; outline: none; user-select: none;
   background:
-    radial-gradient(60% 50% at 50% 55%, rgba(var(--lamp-rgb),.07), transparent 70%),
+    radial-gradient(40% 36% at 50% 50%, rgba(var(--lamp-rgb),.05), transparent 70%),
     var(--void);
 }
 .desk[data-view="page"] { background: radial-gradient(80% 60% at 50% 30%, #141824, var(--void)); }
@@ -322,49 +322,103 @@ body.page-editor {
 .roll.jolt .sheets { animation: jolt 90ms ease-out; }
 @keyframes jolt { 35% { translate: 0 .6px; } }
 
-/* the rail the lamp rides on */
+/* the rail the lamp rides on: dim steel, catching light only near the lamp */
 .rail {
   position: absolute; left: 0; right: 0; height: 1px; z-index: 6; pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(var(--lamp-rgb),.18) 12%, rgba(var(--lamp-rgb),.42) 50%, rgba(var(--lamp-rgb),.18) 88%, transparent);
-  box-shadow: 0 0 6px rgba(var(--lamp-rgb),.18);
+  background: linear-gradient(90deg, transparent, rgba(150,160,185,.10) 15%, rgba(150,160,185,.16) 50%, rgba(150,160,185,.10) 85%, transparent);
   transition: opacity .4s;
 }
 /* margin ticks travel with the carriage */
 .scale { position: absolute; height: 9px; z-index: 6; transition: opacity .4s; pointer-events: none; }
-.scale .stop, .scale .bellmark { position: absolute; top: 0; width: 1px; height: 9px; background: rgba(var(--lamp-rgb),.45); }
-.scale .bellmark { height: 5px; top: 2px; background: rgba(var(--lamp-rgb),.8); box-shadow: 0 0 4px var(--lamp); }
+.scale .stop, .scale .bellmark { position: absolute; top: 0; width: 1px; height: 9px; background: rgba(150,160,185,.3); }
+.scale .bellmark { height: 5px; top: 2px; background: rgba(var(--lamp-rgb),.7); box-shadow: 0 0 4px var(--lamp); }
 
-.lamp { position: absolute; width: 0; height: 0; z-index: 7; pointer-events: none; transition: opacity .4s; }
-.lamp-cone {
-  position: absolute; left: -170px; bottom: 0; width: 340px; height: 330px;
-  background: radial-gradient(ellipse 48% 92% at 50% 100%, rgba(var(--lamp-rgb),.42), rgba(var(--lamp-rgb),.14) 55%, transparent 78%);
-  clip-path: polygon(44% 100%, 56% 100%, 100% 0, 0 0);
-  filter: blur(10px);
-  mix-blend-mode: screen;
-  opacity: .85;
-  transition: opacity .25s;
-  animation: hum 6s ease-in-out infinite;
+/*
+ * The lamp. Its origin sits on the rail at the strike point. No z-index on the
+ * wrapper, so the light layers blend with the typed text underneath instead of
+ * only with each other.
+ */
+.lamp { position: absolute; width: 0; height: 0; pointer-events: none; transition: opacity .4s; }
+.lamp > * { position: absolute; pointer-events: none; }
+
+/* light falling off with distance: text far from the lamp sinks into the dark */
+.lamp-falloff {
+  z-index: 5; left: -1600px; top: -1100px; width: 3200px; height: 2200px;
+  background: radial-gradient(circle at 50% 50%, rgba(7,8,12,0) 0, rgba(7,8,12,0) 140px, rgba(7,8,12,.22) 300px, rgba(7,8,12,.45) 520px, rgba(7,8,12,.62) 900px);
 }
-@keyframes hum { 50% { opacity: .78; } }
+/* the beam: soft-edged wedge, bright at the bulb, inverse-square-ish falloff */
+.lamp-cone {
+  z-index: 6; left: -260px; bottom: 0; width: 520px; height: 440px;
+  background:
+    radial-gradient(ellipse 22% 30% at 50% 100%, rgba(var(--lamp-rgb),.55), transparent 70%),
+    radial-gradient(ellipse 46% 100% at 50% 100%, rgba(var(--lamp-rgb),.30), rgba(var(--lamp-rgb),.12) 32%, rgba(var(--lamp-rgb),.04) 62%, transparent 88%);
+  -webkit-mask-image: conic-gradient(from -34deg at 50% 100%, transparent 0deg, #000 16deg, #000 52deg, transparent 68deg, transparent 360deg);
+  mask-image: conic-gradient(from -34deg at 50% 100%, transparent 0deg, #000 16deg, #000 52deg, transparent 68deg, transparent 360deg);
+  filter: blur(6px);
+  mix-blend-mode: screen;
+  animation: flicker 4.3s linear infinite;
+}
+/* colour of the light on the ink: brightens and tints letters, barely touches the dark */
+.lamp-tint {
+  z-index: 6; left: -340px; bottom: -6px; width: 680px; height: 330px;
+  background: radial-gradient(ellipse 48% 92% at 50% 100%, rgba(var(--lamp-rgb),.95), rgba(var(--lamp-rgb),.55) 28%, rgba(var(--lamp-rgb),.18) 58%, transparent 80%);
+  mix-blend-mode: overlay;
+  animation: flicker 4.3s linear infinite;
+}
+/* bloom around the bulb */
+.lamp-bloom {
+  z-index: 7; left: -110px; top: -55px; width: 220px; height: 110px;
+  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb),.55), rgba(var(--lamp-rgb),.16) 45%, transparent 72%);
+  mix-blend-mode: screen;
+  animation: flicker 4.3s linear infinite;
+}
+/* specular streak along the rail and a faint pool on the desk below it */
+.lamp-spill {
+  z-index: 7; left: -320px; top: -2px; width: 640px; height: 70px;
+  background:
+    radial-gradient(ellipse 50% 2.4px at 50% 2px, rgba(var(--lamp-rgb),.95), rgba(var(--lamp-rgb),.35) 40%, transparent),
+    radial-gradient(ellipse 30% 70% at 50% 0%, rgba(var(--lamp-rgb),.10), transparent 75%);
+  mix-blend-mode: screen;
+}
+.lamp-motes { z-index: 7; left: -220px; bottom: 6px; width: 440px; height: 380px; mix-blend-mode: screen; }
+
 .lamp-stem {
-  position: absolute; left: -1px; bottom: 4px; width: 2px; height: 13px; border-radius: 1px;
-  background: linear-gradient(var(--lamp-hi), var(--lamp));
-  box-shadow: 0 0 6px rgba(var(--lamp-rgb),.9);
+  z-index: 8; left: -1px; bottom: 5px; width: 2px; height: 12px; border-radius: 1px;
+  background: linear-gradient(var(--lamp-hi-2), var(--lamp-hi));
+  box-shadow: 0 0 4px rgba(var(--lamp-rgb),.9), 0 0 10px rgba(var(--lamp-rgb),.5);
 }
 .lamp-stem::before {
-  content: ''; position: absolute; left: -4px; top: -1px; width: 10px; height: 2px; border-radius: 1px; background: var(--lamp-hi);
+  content: ''; position: absolute; left: -4px; top: -1px; width: 10px; height: 2px; border-radius: 1px; background: var(--lamp-hi-2);
   box-shadow: 0 0 6px rgba(var(--lamp-rgb),.9);
 }
+/* frosted diffuser: white-hot core, colour toward the rim, small specular glint */
 .lamp-head {
-  position: absolute; left: -24px; top: -8px; width: 48px; height: 16px; border-radius: 9px;
-  background: linear-gradient(180deg, var(--lamp-hi), var(--lamp) 45%, var(--lamp-2));
-  box-shadow: 0 0 0 1px rgba(200,215,255,.35) inset, 0 0 14px rgba(var(--lamp-rgb),.85), 0 0 40px rgba(var(--lamp-rgb),.45);
+  z-index: 8; left: -24px; top: -8px; width: 48px; height: 16px; border-radius: 9px;
+  background:
+    radial-gradient(ellipse 34% 60% at 50% 46%, #fff 0, var(--lamp-hi-2) 35%, transparent 75%),
+    linear-gradient(180deg, var(--lamp-hi), var(--lamp) 50%, var(--lamp-2));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.55), inset 0 -2px 3px rgba(0,0,0,.25),
+    0 0 6px rgba(var(--lamp-rgb),.95), 0 0 18px rgba(var(--lamp-rgb),.7), 0 0 46px rgba(var(--lamp-rgb),.4), 0 0 90px rgba(var(--lamp-rgb),.18);
 }
-.lamp-head i { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: var(--lamp-hi-2); box-shadow: 0 0 6px #fff; }
-.lamp.hit .lamp-cone { animation: flare 140ms ease-out; }
+.lamp-head i { position: absolute; left: 30%; top: 3px; width: 9px; height: 2px; border-radius: 2px; background: rgba(255,255,255,.75); filter: blur(.4px); }
+
+/* a bulb is never perfectly steady */
+@keyframes flicker {
+  0%, 100% { opacity: 1; } 6% { opacity: .96; } 9% { opacity: .99; } 23% { opacity: .97; }
+  41% { opacity: 1; } 57% { opacity: .95; } 60% { opacity: .99; } 78% { opacity: .97; } 91% { opacity: 1; }
+}
 .lamp.hit .lamp-head { animation: press 110ms ease-out; }
-@keyframes flare { 0% { opacity: 1; } 100% { opacity: .85; } }
-@keyframes press { 40% { transform: translateY(1.5px); filter: brightness(1.25); } }
+.lamp.hit .lamp-bloom { animation: surge 160ms ease-out; }
+@keyframes press { 40% { transform: translateY(1.5px); } }
+@keyframes surge { 0% { filter: brightness(1.35); } }
+
+/* fine film grain stops the dark gradients from banding */
+.desk::after {
+  content: ''; position: absolute; inset: 0; z-index: 9; pointer-events: none; opacity: .055; mix-blend-mode: overlay;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.desk[data-view="page"]::after { opacity: 0; }
 
 /* old lines fade into the dark above; the edges fall away */
 .vignette {
@@ -398,8 +452,8 @@ body.page-editor {
 /* typed text in the dark: no paper, pale ink catching the lamp */
 .desk[data-view="carriage"] .sheet { background: none; box-shadow: none; }
 .desk[data-view="carriage"] .sheet-num { display: none; }
-.desk[data-view="carriage"] .g { color: #c3cbdd; text-shadow: 0 0 .6px rgba(195,205,230,.6), 0 0 8px rgba(var(--lamp-rgb),.12); }
-.desk[data-view="carriage"] .g.red { color: #ff8b7c; text-shadow: 0 0 .6px rgba(255,139,124,.6), 0 0 8px rgba(255,120,100,.15); }
+.desk[data-view="carriage"] .g { color: #a7aebd; text-shadow: 0 0 .6px rgba(195,205,230,.5); }
+.desk[data-view="carriage"] .g.red { color: #e47c6f; text-shadow: 0 0 .6px rgba(255,139,124,.5); }
 
 /* dialogs & toasts in the editor follow the dark room */
 body.page-editor .toast { background: rgba(16,19,28,.94); color: #cfd8ee; border: 1px solid rgba(var(--lamp-rgb),.25); box-shadow: 0 10px 30px rgba(0,0,0,.6), 0 0 20px rgba(var(--lamp-rgb),.12); }
@@ -594,7 +648,8 @@ body.page-shared { background: var(--black); }
 }
 @media (prefers-reduced-motion: reduce) {
   .carriage, .roll { transition: none !important; }
-  .lamp-cone, .lamp.hit .lamp-head, .roll.jolt .sheets, .desk.shake .stage { animation: none; }
+  .lamp-cone, .lamp-tint, .lamp-bloom, .lamp.hit .lamp-head, .roll.jolt .sheets, .desk.shake .stage { animation: none; }
+  .lamp-motes { display: none; }
 }
 
 /* ==========================================================================
