@@ -1128,8 +1128,17 @@ export function mountEditor(root, { doc, navigate }) {
     try { status = await api.googleStatus(); } catch (e) { return toast(e.message); }
     await refreshGoogle();
     let body;
+    // The exact address Google must list under "Authorized redirect URIs".
+    const redirectBlock = status.redirectUri
+      ? `<div class="gdoc-redirect">
+          <span class="mono">Redirect URI for Google Cloud</span>
+          <div class="share-row"><input class="input gdoc-redirect-uri" readonly value="${escapeHtml(status.redirectUri)}" aria-label="Redirect URI" />
+          <button class="btn gdoc-copy" type="button">${icons.copy}<span>Copy</span></button></div>
+          <p class="muted">If Google says <b>redirect_uri_mismatch</b>, add this exact address to your OAuth client under Authorized redirect URIs.</p>
+        </div>`
+      : '';
     if (!status.configured) {
-      body = `<p class="muted">Google Docs sync isn't set up on this server yet. The server needs a Google OAuth client (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET). See the README for the steps.</p>`;
+      body = `<p class="muted">Google Docs sync isn't set up on this server yet. The server needs a Google OAuth client (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET). See the README for the steps.</p>${redirectBlock}`;
     } else if (!status.connected) {
       body = `
         <p class="muted">Mirror this document into a real Google Doc in your Drive. As you type, the Google Doc follows a few seconds behind.</p>
@@ -1138,7 +1147,8 @@ export function mountEditor(root, { doc, navigate }) {
           <li>Text, red ribbon and page breaks carry over. Overstrikes show the last letter typed.</li>
           <li>Edits made directly in Google Docs are replaced by Naoko's version.</li>
         </ul>
-        <div class="modal-actions"><a class="btn btn-primary gdoc-connect" href="/api/google/connect?doc=${doc.id}"><span>Connect Google Drive</span><span aria-hidden="true">→</span></a></div>`;
+        <div class="modal-actions"><a class="btn btn-primary gdoc-connect" href="/api/google/connect?doc=${doc.id}"><span>Connect Google Drive</span><span aria-hidden="true">→</span></a></div>
+        ${redirectBlock}`;
     } else {
       body = `
         <p class="muted">Connected as <b>${escapeHtml(status.email || 'your Google account')}</b>.</p>
@@ -1153,6 +1163,18 @@ export function mountEditor(root, { doc, navigate }) {
     const m = modal(`<h2>Google Docs</h2><div class="gdoc-panel">${body}</div>`, { onClose: focusKeys });
     const panel = m.el.querySelector('.gdoc-panel');
     renderGooglePanelStatus(panel);
+    const copyBtn = panel.querySelector('.gdoc-copy');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async () => {
+        const input = panel.querySelector('.gdoc-redirect-uri');
+        try {
+          await navigator.clipboard.writeText(input.value);
+          toast('Redirect URI copied');
+        } catch {
+          input.select();
+        }
+      });
+    }
     const connect = panel.querySelector('.gdoc-connect');
     if (connect) {
       connect.addEventListener('click', async (e) => {

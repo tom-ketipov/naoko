@@ -586,6 +586,10 @@ body.page-editor .modal .btn-primary { background: var(--lt); border-color: var(
 body.page-editor .modal .btn-primary:hover { background: transparent; color: var(--lt); }
 body.page-editor .modal .arrow-link { color: var(--lt-dim); }
 .gdoc-note { margin: 20px 0 0 !important; font-size: 12px; }
+.gdoc-redirect { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--hair); display: grid; gap: 10px; }
+.gdoc-redirect > .mono { font-size: 10px; color: var(--lt-dim); }
+.gdoc-redirect .input { font-family: var(--mono-ui); font-size: 12px; }
+.gdoc-redirect p { margin: 0 !important; font-size: 12px; }
 @media (max-width: 900px) { .gdoc-state { display: none; } }
 
 /* ==========================================================================

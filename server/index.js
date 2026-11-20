@@ -351,7 +351,13 @@ app.get(
   requireUser,
   asyncH(async (req, res) => {
     const acct = google.configured() ? await store.getGoogleAccount(req.user.id) : null;
-    res.json({ configured: google.configured(), connected: !!acct, email: (acct && acct.email) || null });
+    res.json({
+      configured: google.configured(),
+      connected: !!acct,
+      email: (acct && acct.email) || null,
+      // what Google must have under "Authorized redirect URIs" (helps fix redirect_uri_mismatch)
+      redirectUri: google.redirectUri(req),
+    });
   })
 );
 
