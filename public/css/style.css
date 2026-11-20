@@ -13,6 +13,7 @@
   --line-dark: rgba(244,243,239,.12);
   --accent: #0a0a0a;
   --danger: #c6301f;
+  --signal: #d42a1e;
   --ink: #1f1c1a;
   --ink-red: #ad2a1c;
   --display: 'Archivo', 'Arial Narrow', Impact, sans-serif;
@@ -133,7 +134,22 @@ kbd {
    Auth — black
    ========================================================================== */
 .dark { background: var(--black); color: var(--bone); }
-body.page-auth { background: var(--black); }
+body.page-auth { background: var(--signal); }
+/* landing: signal red instead of black */
+.auth.dark { background: var(--signal); }
+.auth .nav { background: var(--signal); border-bottom-color: rgba(244,243,239,.22); }
+.auth .gridlines i { border-color: rgba(244,243,239,.14); }
+.auth .foot { border-top-color: rgba(244,243,239,.22); color: rgba(244,243,239,.7); }
+.auth .anno { color: rgba(244,243,239,.62); }
+.auth .lede { color: rgba(244,243,239,.86); }
+.auth .field > span, .auth .auth-tabs button { color: rgba(244,243,239,.7); }
+.auth .auth-tabs button[aria-selected="true"] { color: var(--bone); }
+.auth .input { border-bottom-color: rgba(244,243,239,.45); }
+.auth .input:-webkit-autofill { -webkit-box-shadow: 0 0 0 40px var(--signal) inset; }
+.auth .btn-primary { background: var(--bone); color: var(--black); border-color: var(--bone); }
+.auth .btn-primary:hover { background: var(--black); color: var(--bone); border-color: var(--black); }
+.auth .form-error { color: var(--black); font-weight: 700; }
+.auth ::selection { background: var(--bone); color: var(--signal); }
 .auth { position: relative; min-height: 100dvh; display: flex; flex-direction: column; }
 .auth-main {
   position: relative; z-index: 1; flex: 1; display: grid; grid-template-columns: repeat(12, 1fr);
