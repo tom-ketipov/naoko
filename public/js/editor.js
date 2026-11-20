@@ -89,8 +89,9 @@ export function mountEditor(root, { doc, navigate }) {
         <div class="lamp" aria-hidden="true">
           <div class="lamp-falloff"></div>
           <div class="lamp-cone"></div>
+          <div class="lamp-ambient"></div>
           <div class="lamp-tint"></div>
-          <canvas class="lamp-motes" width="440" height="380"></canvas>
+          <canvas class="lamp-motes" width="560" height="480"></canvas>
           <div class="lamp-spill"></div>
           <div class="lamp-bloom"></div>
           <div class="lamp-flash"></div>
@@ -131,28 +132,33 @@ export function mountEditor(root, { doc, navigate }) {
   const motes = (() => {
     const canvas = $('.lamp-motes');
     const ctx = canvas.getContext('2d');
-    const W = 440;
-    const H = 380;
+    const W = 560;
+    const H = 480;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = W * dpr;
     canvas.height = H * dpr;
     ctx.scale(dpr, dpr);
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const SPREAD = Math.tan((26 * Math.PI) / 180); // beam half-angle
+    const SPREAD = Math.tan((38 * Math.PI) / 180); // matches the wider, feathered beam
     let rgb = [125, 155, 255];
     let level = 1;
     let raf = 0;
     let last = 0;
+    // A few tiny specks, drifting lazily: they only show where the light catches them.
     const spawn = (anywhere) => ({
-      x: W / 2 + (Math.random() - 0.5) * W * 0.9,
-      y: anywhere ? Math.random() * H : H + 4,
-      r: 0.35 + Math.random() * Math.random() * 1.5,
-      vx: (Math.random() - 0.5) * 4,
-      vy: -(1.5 + Math.random() * 5),
+      x: W / 2 + (Math.random() - 0.5) * W * 0.8,
+      y: anywhere ? Math.random() * H : H + 2,
+      r: 0.25 + Math.random() * Math.random() * 0.75,
+      vx: (Math.random() - 0.5) * 1.6,
+      vy: -(0.6 + Math.random() * 2.2),
+      sway: 0.5 + Math.random() * 1.5, // px/s of slow side-to-side wander
+      sp: Math.random() * Math.PI * 2,
       ph: Math.random() * Math.PI * 2,
-      tw: 0.4 + Math.random() * 1.4,
+      tw: 0.25 + Math.random() * 0.8,
+      age: anywhere ? 10 : 0, // fade in when born so nothing pops into view
     });
-    const dust = Array.from({ length: 46 }, () => spawn(true));
+    const dust = Array.from({ length: 24 }, () => spawn(true));
+    const smooth = (x) => x * x * (3 - 2 * x);
 
     function frame(t) {
       raf = requestAnimationFrame(frame);
@@ -160,21 +166,23 @@ export function mountEditor(root, { doc, navigate }) {
       last = t;
       ctx.clearRect(0, 0, W, H);
       for (const m of dust) {
-        // slow Brownian drift, warm air rising
-        m.vx += (Math.random() - 0.5) * 6 * dt;
-        m.vy += (Math.random() - 0.5) * 4 * dt;
-        m.vx *= 0.995;
-        m.x += m.vx * dt;
+        m.age += dt;
+        m.sp += dt * 0.6;
+        m.vx += (Math.random() - 0.5) * 1.2 * dt;
+        m.vx *= 0.992;
+        m.x += (m.vx + Math.sin(m.sp) * m.sway) * dt;
         m.y += m.vy * dt;
         m.ph += m.tw * dt;
-        if (m.y < -4 || m.x < -4 || m.x > W + 4) Object.assign(m, spawn(false));
+        if (m.y < -3 || m.x < -3 || m.x > W + 3) Object.assign(m, spawn(false));
         const dy = H - m.y; // distance from the bulb
-        const half = 10 + dy * SPREAD;
+        const half = 14 + dy * SPREAD;
         const edge = Math.max(0, 1 - Math.abs(m.x - W / 2) / half);
         if (!edge) continue;
-        const fall = 1 / (1 + (dy / 150) ** 2);
-        const a = Math.min(1, edge * edge * (3 - 2 * edge) * fall * (0.55 + 0.45 * Math.sin(m.ph)) * 0.9 * level);
-        if (a < 0.02) continue;
+        const fall = 1 / (1 + (dy / 170) ** 2);
+        const born = Math.min(1, m.age / 1.5);
+        const glint = 0.45 + 0.55 * Math.max(0, Math.sin(m.ph)) ** 2; // catching the light now and then
+        const a = Math.min(0.75, smooth(edge) * fall * glint * born * 1.05 * level);
+        if (a < 0.015) continue;
         ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
@@ -185,7 +193,7 @@ export function mountEditor(root, { doc, navigate }) {
       setLevel(v) { level = v; },
       setColor(r, g, b) {
         // dust catches the light a little whiter than the beam itself
-        rgb = [r, g, b].map((c) => Math.round(c + (255 - c) * 0.45));
+        rgb = [r, g, b].map((c) => Math.round(c + (255 - c) * 0.5));
       },
       start() {
         if (reduce || raf || document.hidden || view !== 'carriage') return;

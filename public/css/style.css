@@ -367,48 +367,83 @@ body.page-editor {
 .lamp { position: absolute; width: 0; height: 0; pointer-events: none; transition: opacity .4s; }
 .lamp > * { position: absolute; pointer-events: none; }
 
-/* light falling off with distance: text far from the lamp sinks into the dark */
+/* light falling off with distance: text far from the lamp sinks gently into the dark */
 .lamp-falloff {
   z-index: 5; left: -1600px; top: -1100px; width: 3200px; height: 2200px;
-  background: radial-gradient(circle at 50% 50%, rgba(7,8,12,0) 0, rgba(7,8,12,0) 200px, rgba(7,8,12, calc(.14 * (2 - var(--lv)))) 380px, rgba(7,8,12, calc(.32 * (2 - var(--lv)))) 640px, rgba(7,8,12, calc(.5 * (2 - var(--lv)))) 1000px);
+  background: radial-gradient(circle at 50% 50%,
+    rgba(7,8,12,0) 0, rgba(7,8,12,0) 230px,
+    rgba(7,8,12, calc(.06 * (2 - var(--lv)))) 330px,
+    rgba(7,8,12, calc(.14 * (2 - var(--lv)))) 460px,
+    rgba(7,8,12, calc(.24 * (2 - var(--lv)))) 640px,
+    rgba(7,8,12, calc(.34 * (2 - var(--lv)))) 860px,
+    rgba(7,8,12, calc(.42 * (2 - var(--lv)))) 1100px);
 }
-/* the beam: soft-edged wedge, bright at the bulb, inverse-square-ish falloff */
+/* light spilling softly in every direction: onto the page, the rail and the desk below */
+.lamp-ambient {
+  z-index: 7; left: -620px; top: -360px; width: 1240px; height: 720px;
+  background: radial-gradient(ellipse 50% 50% at 50% 50%,
+    rgba(var(--lamp-rgb), calc(.11 * var(--lv))) 0%,
+    rgba(var(--lamp-rgb), calc(.07 * var(--lv))) 14%,
+    rgba(var(--lamp-rgb), calc(.04 * var(--lv))) 30%,
+    rgba(var(--lamp-rgb), calc(.018 * var(--lv))) 50%,
+    rgba(var(--lamp-rgb), calc(.006 * var(--lv))) 72%,
+    transparent 100%);
+  mix-blend-mode: screen;
+  animation: flicker 4.3s linear infinite;
+}
+/* the beam: a wide, feathered wedge, bright at the bulb, falling off smoothly */
 .lamp-cone {
-  z-index: 6; left: -300px; bottom: 0; width: 600px; height: 500px;
+  z-index: 6; left: -340px; bottom: 0; width: 680px; height: 560px;
   transform-origin: 50% 100%; transform: scale(calc(.85 + .15 * var(--lv)), calc(.7 + .3 * var(--lv)));
   background:
-    radial-gradient(ellipse 22% 30% at 50% 100%, rgba(var(--lamp-rgb), calc(.7 * var(--lv))), transparent 70%),
-    radial-gradient(ellipse 46% 100% at 50% 100%, rgba(var(--lamp-rgb), calc(.4 * var(--lv))), rgba(var(--lamp-rgb), calc(.17 * var(--lv))) 32%, rgba(var(--lamp-rgb), calc(.06 * var(--lv))) 62%, transparent 88%);
-  -webkit-mask-image: conic-gradient(from -34deg at 50% 100%, transparent 0deg, #000 16deg, #000 52deg, transparent 68deg, transparent 360deg);
-  mask-image: conic-gradient(from -34deg at 50% 100%, transparent 0deg, #000 16deg, #000 52deg, transparent 68deg, transparent 360deg);
-  filter: blur(6px);
+    radial-gradient(ellipse 20% 26% at 50% 100%, rgba(var(--lamp-rgb), calc(.55 * var(--lv))), rgba(var(--lamp-rgb), calc(.2 * var(--lv))) 45%, transparent 80%),
+    radial-gradient(ellipse 50% 100% at 50% 100%,
+      rgba(var(--lamp-rgb), calc(.34 * var(--lv))) 0%,
+      rgba(var(--lamp-rgb), calc(.22 * var(--lv))) 16%,
+      rgba(var(--lamp-rgb), calc(.13 * var(--lv))) 32%,
+      rgba(var(--lamp-rgb), calc(.07 * var(--lv))) 50%,
+      rgba(var(--lamp-rgb), calc(.03 * var(--lv))) 70%,
+      transparent 94%);
+  -webkit-mask-image: conic-gradient(from -50deg at 50% 100%, transparent 0deg, rgba(0,0,0,.35) 14deg, #000 34deg, #000 66deg, rgba(0,0,0,.35) 86deg, transparent 100deg, transparent 360deg);
+  mask-image: conic-gradient(from -50deg at 50% 100%, transparent 0deg, rgba(0,0,0,.35) 14deg, #000 34deg, #000 66deg, rgba(0,0,0,.35) 86deg, transparent 100deg, transparent 360deg);
+  filter: blur(14px);
   mix-blend-mode: screen;
   animation: flicker 4.3s linear infinite;
 }
 /* colour of the light on the ink: brightens and tints letters, barely touches the dark */
 .lamp-tint {
-  z-index: 6; left: -400px; bottom: -6px; width: 800px; height: 400px;
+  z-index: 6; left: -460px; bottom: -6px; width: 920px; height: 440px;
   transform-origin: 50% 100%; transform: scale(calc(.8 + .2 * var(--lv)), calc(.7 + .3 * var(--lv)));
-  background: radial-gradient(ellipse 48% 92% at 50% 100%, rgba(var(--lamp-rgb), calc(.95 * var(--lv))), rgba(var(--lamp-rgb), calc(.65 * var(--lv))) 28%, rgba(var(--lamp-rgb), calc(.26 * var(--lv))) 58%, transparent 85%);
+  background: radial-gradient(ellipse 50% 95% at 50% 100%,
+    rgba(var(--lamp-rgb), calc(.9 * var(--lv))) 0%,
+    rgba(var(--lamp-rgb), calc(.62 * var(--lv))) 22%,
+    rgba(var(--lamp-rgb), calc(.36 * var(--lv))) 44%,
+    rgba(var(--lamp-rgb), calc(.16 * var(--lv))) 66%,
+    transparent 90%);
   mix-blend-mode: overlay;
   animation: flicker 4.3s linear infinite;
 }
-/* bloom around the bulb */
+/* bloom around the bulb: wide and soft, like light in slightly hazy air */
 .lamp-bloom {
-  z-index: 7; left: -110px; top: -55px; width: 220px; height: 110px;
-  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb), calc(.68 * var(--lv))), rgba(var(--lamp-rgb), calc(.2 * var(--lv))) 45%, transparent 72%);
+  z-index: 7; left: -170px; top: -85px; width: 340px; height: 170px;
+  background: radial-gradient(ellipse 50% 50% at 50% 50%,
+    rgba(var(--lamp-rgb), calc(.6 * var(--lv))) 0%,
+    rgba(var(--lamp-rgb), calc(.3 * var(--lv))) 18%,
+    rgba(var(--lamp-rgb), calc(.12 * var(--lv))) 40%,
+    rgba(var(--lamp-rgb), calc(.04 * var(--lv))) 62%,
+    transparent 85%);
   mix-blend-mode: screen;
   animation: flicker 4.3s linear infinite;
 }
-/* specular streak along the rail and a faint pool on the desk below it */
+/* specular streak along the rail and a soft pool on the desk below it */
 .lamp-spill {
-  z-index: 7; left: -320px; top: -2px; width: 640px; height: 70px;
+  z-index: 7; left: -380px; top: -2px; width: 760px; height: 110px;
   background:
-    radial-gradient(ellipse 50% 2.4px at 50% 2px, rgba(var(--lamp-rgb), calc(.95 * var(--lv))), rgba(var(--lamp-rgb), calc(.35 * var(--lv))) 40%, transparent),
-    radial-gradient(ellipse 30% 70% at 50% 0%, rgba(var(--lamp-rgb), calc(.10 * var(--lv))), transparent 75%);
+    radial-gradient(ellipse 50% 2.4px at 50% 2px, rgba(var(--lamp-rgb), calc(.9 * var(--lv))), rgba(var(--lamp-rgb), calc(.3 * var(--lv))) 45%, transparent),
+    radial-gradient(ellipse 34% 80% at 50% 0%, rgba(var(--lamp-rgb), calc(.09 * var(--lv))), rgba(var(--lamp-rgb), calc(.03 * var(--lv))) 50%, transparent 85%);
   mix-blend-mode: screen;
 }
-.lamp-motes { z-index: 7; left: -220px; bottom: 6px; width: 440px; height: 380px; mix-blend-mode: screen; }
+.lamp-motes { z-index: 7; left: -280px; bottom: 6px; width: 560px; height: 480px; mix-blend-mode: screen; }
 
 .lamp-stem {
   z-index: 8; left: -1px; bottom: 5px; width: 2px; height: 12px; border-radius: 1px;
@@ -726,7 +761,7 @@ body.page-shared { background: var(--black); }
 }
 @media (prefers-reduced-motion: reduce) {
   .carriage, .roll { transition: none !important; }
-  .lamp-cone, .lamp-tint, .lamp-bloom { animation: none; }
+  .lamp-cone, .lamp-tint, .lamp-bloom, .lamp-ambient { animation: none; }
   .lamp-motes { display: none; }
 }
 
