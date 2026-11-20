@@ -1,4 +1,4 @@
-// The typewriter: carriage, platen, margin bell and ribbon.
+// The typewriter: a lamp-lit carriage on a dark desk, margin bell and ribbon.
 import { api } from './api.js';
 import { sound } from './sound.js';
 import { icons } from './icons.js';
@@ -8,6 +8,7 @@ import { toast, modal, escapeHtml, menu } from './ui.js';
 const MAX_ROWS = 4999;
 const TAB = 5;
 const BELL_BEFORE = 7;
+const PAGE_TOP = 72; // clear the floating toolbar in page view
 const SENTINEL = '​​';
 
 const EASE = {
@@ -62,31 +63,23 @@ export function mountEditor(root, { doc, navigate }) {
         <div class="carriage">
           <div class="roll"><div class="sheets"></div><div class="caret"></div></div>
           <div class="scale"></div>
-          <div class="platen"><span class="knob l"></span><span class="knob r"></span></div>
         </div>
-        <div class="guide"><span class="notch"></span></div>
-        <div class="typebar"></div>
+        <div class="rail"></div>
+        <div class="lamp" aria-hidden="true">
+          <div class="lamp-cone"></div>
+          <div class="lamp-stem"></div>
+          <div class="lamp-head"><i></i></div>
+        </div>
       </div>
-      <div class="machine">
-        <div class="machine-plate">
-          <span class="plate-brand">NAOKO</span>
-          <span class="plate-model">Standard No. 5</span>
-        </div>
-        <div class="dials">
-          <div class="dial"><b data-k="line">1</b><span>line</span></div>
-          <div class="dial"><b data-k="col">1</b><span>col</span></div>
-          <div class="dial"><b data-k="page">1</b><span>page</span></div>
-        </div>
-        <div class="machine-hint">Type anywhere · <kbd>Return</kbd> carriage return · <kbd>↑</kbd><kbd>↓</kbd> roll platen</div>
-      </div>
+      <div class="vignette" aria-hidden="true"></div>
       <textarea class="keys" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Typewriter keyboard input"></textarea>
     </main>
     <footer class="ed-status">
-      <span data-k="pos"></span>
-      <span data-k="words"></span>
-      <span data-k="mode"></span>
+      <span class="words" data-k="words"></span>
+      <span class="aux" data-k="pos"></span>
+      <span class="aux" data-k="mode"></span>
       <span class="spacer"></span>
-      <span class="hint-k">Paste to auto-type</span>
+      <span class="aux hint-k"><kbd>Return</kbd> new line · <kbd>↑</kbd><kbd>↓</kbd> roll · paste to auto-type</span>
     </footer>
   </div>`;
 
@@ -96,10 +89,10 @@ export function mountEditor(root, { doc, navigate }) {
   const carriage = $('.carriage');
   const roll = $('.roll');
   const caret = $('.caret');
+  const editorEl = $('.editor');
   const scaleEl = $('.scale');
-  const platen = $('.platen');
-  const guide = $('.guide');
-  const typebar = $('.typebar');
+  const rail = $('.rail');
+  const lamp = $('.lamp');
   const keys = $('.keys');
   const titleInput = $('.ed-title');
   const saveState = $('.save-state');
@@ -117,43 +110,37 @@ export function mountEditor(root, { doc, navigate }) {
     stage.style.zoom = s;
     const w = r.width / s;
     const h = r.height / s;
-    geo = { s, w, h, sx: Math.round(w / 2), sy: Math.round(h * (r.height < 520 ? 0.5 : 0.55)) };
+    geo = { s, w, h, sx: Math.round(w / 2), sy: Math.round(h * 0.5) };
     stage.style.width = `${w}px`;
     stage.style.height = `${h}px`;
     paper.el.style.setProperty('--print-zoom', String(816 / sheetW));
-    const machineTop = geo.sy + 19 + 44;
-    desk.style.setProperty('--machine-top', `${machineTop * s}px`);
+    desk.style.setProperty('--strike-y', `${(geo.sy + 24) * s}px`);
+    desk.style.setProperty('--rail-y', `${(geo.sy + 14) * s}px`);
     layoutFixtures();
   }
 
   function layoutFixtures() {
     const { sx, sy } = geo;
-    scaleEl.style.top = `${sy + 5}px`;
-    platen.style.top = `${sy + 19}px`;
-    guide.style.left = `${sx - 42}px`;
-    guide.style.top = `${sy - LH - 8}px`;
-    typebar.style.left = `${sx - CW / 2}px`;
-    typebar.style.top = `${sy - LH + 2}px`;
+    rail.style.top = `${sy + 14}px`;
+    scaleEl.style.top = `${sy + 10}px`;
+    lamp.style.left = `${sx}px`;
+    lamp.style.top = `${sy + 14}px`;
     buildScale();
   }
 
   function buildScale() {
     const cols = settings.cols;
     const left = MARGIN_COLS * CW;
-    scaleEl.style.left = `${left - 6 * CW}px`;
-    scaleEl.style.width = `${(cols + 12) * CW}px`;
-    let marks = '';
-    for (let c = 0; c <= cols; c += 10) marks += `<span class="num" style="left:${(c + 6) * CW}px">${c}</span>`;
-    marks += `<span class="stop" style="left:${6 * CW}px" title="Left margin"></span>`;
-    marks += `<span class="stop" style="left:${(cols + 6) * CW}px" title="Right margin"></span>`;
-    marks += `<span class="bellmark" style="left:${(cols - BELL_BEFORE + 6) * CW}px" title="Margin bell"></span>`;
-    scaleEl.innerHTML = marks;
-    platen.style.left = `${-40}px`;
-    platen.style.width = `${paper.sheetW + 80}px`;
+    // faint ticks on the rail: left margin, margin bell, right margin
+    scaleEl.style.left = `${left}px`;
+    scaleEl.innerHTML =
+      `<span class="stop" style="left:0" title="Left margin"></span>` +
+      `<span class="bellmark" style="left:${(cols - BELL_BEFORE) * CW}px" title="Margin bell"></span>` +
+      `<span class="stop" style="left:${cols * CW}px" title="Right margin"></span>`;
   }
 
   function maxScroll() {
-    return Math.max(0, paper.totalHeight() - geo.h + 64);
+    return Math.max(0, paper.totalHeight() - geo.h + PAGE_TOP + 60);
   }
 
   function place(kind = 'step') {
@@ -165,7 +152,7 @@ export function mountEditor(root, { doc, navigate }) {
       y = geo.sy - LH - pos.y;
     } else {
       x = Math.round((geo.w - paper.sheetW) / 2);
-      y = 24 - scrollY;
+      y = PAGE_TOP - scrollY;
     }
     carriage.style.transition = EASE[kind] || EASE.step;
     roll.style.transition = view === 'carriage' ? EASE[kind === 'step' ? 'roll' : kind] || EASE.roll : EASE[kind === 'step' ? 'none' : kind];
@@ -179,16 +166,13 @@ export function mountEditor(root, { doc, navigate }) {
   function followCaret() {
     if (view !== 'page') return;
     const { y } = paper.cellPos(row, col);
-    const top = y + 24 - scrollY;
+    const top = y + PAGE_TOP - scrollY;
     if (top < 40) scrollY = Math.max(0, y - 80);
     else if (top > geo.h - 80) scrollY = Math.min(maxScroll(), y - geo.h + 140);
   }
 
   function updateReadouts(page) {
     const pages = Math.max(paper.sheets.length, page + 1);
-    root.querySelector('[data-k="line"]').textContent = (row % settings.linesPerPage) + 1;
-    root.querySelector('[data-k="col"]').textContent = col + 1;
-    root.querySelector('[data-k="page"]').textContent = page + 1;
     root.querySelector('[data-k="pos"]').textContent = `Ln ${(row % settings.linesPerPage) + 1}, Col ${col + 1} · Page ${page + 1} of ${pages}`;
   }
 
@@ -242,9 +226,10 @@ export function mountEditor(root, { doc, navigate }) {
   }
 
   function animateStrike() {
-    typebar.classList.remove('hit');
-    void typebar.offsetWidth; // restart animation
-    typebar.classList.add('hit');
+    lamp.classList.remove('hit');
+    void lamp.offsetWidth; // restart animation
+    lamp.classList.add('hit');
+    editorEl.classList.add('typing');
     if (view === 'carriage') {
       roll.classList.remove('jolt');
       void roll.offsetWidth;
@@ -595,7 +580,7 @@ export function mountEditor(root, { doc, navigate }) {
   desk.addEventListener('pointerup', (e) => {
     const d = drag;
     drag = null;
-    if (!d || d.moved || e.target.closest('.machine')) {
+    if (!d || d.moved || e.target.closest('.ed-status')) {
       focusKeys();
       return;
     }
@@ -624,6 +609,15 @@ export function mountEditor(root, { doc, navigate }) {
     },
     { passive: false }
   );
+
+  /* chrome fades away while typing, returns when the mouse moves */
+  let lastMove = null;
+  editorEl.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    if (lastMove && Math.hypot(e.clientX - lastMove.x, e.clientY - lastMove.y) < 12) return;
+    lastMove = { x: e.clientX, y: e.clientY };
+    editorEl.classList.remove('typing');
+  });
 
   /* ---------------------------------------------------------------- */
   /* Toolbar                                                           */
