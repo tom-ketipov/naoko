@@ -57,9 +57,10 @@ function showAuth(mode) {
       <span class="anno anno-tl mono">Line 01</span>
       <span class="anno anno-tr mono">Col 65 · Margin bell</span>
       <section class="auth-hero">
-        <h1 class="display" aria-label="No undo. Only the next word.">
-          <span class="l1"></span><span class="l2"></span><span class="l3"></span>
+        <h1 class="display" aria-label="Naoko">
+          <span class="l1"></span>
         </h1>
+        <p class="hero-sub mono">No undo. Only the next word.</p>
         <p class="lede">A typewriter for the browser. Carriage returns, a margin bell, ribbon ink and paper — saved to the cloud, shared with a link.</p>
       </section>
       <section class="auth-panel">
@@ -81,7 +82,7 @@ function showAuth(mode) {
   </div>`;
 
   // Headline types itself, line by line.
-  const lines = ['No undo.', 'Only the', 'next word.'];
+  const lines = ['Naoko'];
   const els = [...app.querySelectorAll('.auth-hero .display span')];
   const caret = document.createElement('i');
   caret.className = 'caret';
