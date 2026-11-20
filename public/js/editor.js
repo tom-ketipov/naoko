@@ -74,6 +74,7 @@ export function mountEditor(root, { doc, navigate }) {
       </button>
       <button class="icon-btn lamp-btn" data-act="lamp" title="Lamp colour" aria-label="Lamp colour" aria-haspopup="dialog"><span class="lamp-swatch"></span></button>
       <button class="icon-btn" data-act="sound" title="Sound" aria-label="Toggle sound"></button>
+      <button class="icon-btn" data-act="zen" title="Zen mode (⌘/Ctrl + Enter)" aria-label="Zen mode">${icons.zen}</button>
       <button class="icon-btn" data-act="settings" title="Typewriter settings" aria-label="Typewriter settings">${icons.settings}</button>
       <button class="icon-btn" data-act="export" title="Export" aria-label="Export">${icons.download}</button>
       <button class="btn btn-primary btn-sm" data-act="share">${icons.share}<span>Share</span></button>
@@ -833,6 +834,11 @@ export function mountEditor(root, { doc, navigate }) {
   keys.addEventListener('keydown', (e) => {
     sound.unlock();
     const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key === 'Enter') {
+      e.preventDefault();
+      toggleZen();
+      return;
+    }
     if (mod && (e.key === 's' || e.key === 'S')) {
       e.preventDefault();
       dirty = true;
@@ -858,7 +864,10 @@ export function mountEditor(root, { doc, navigate }) {
       case 'Home': e.preventDefault(); if (col) carriageReturn(false); return;
       case 'PageDown': e.preventDefault(); rollPlaten(settings.linesPerPage - (row % settings.linesPerPage)); return;
       case 'PageUp': e.preventDefault(); rollPlaten(-((row % settings.linesPerPage) || settings.linesPerPage)); return;
-      case 'Escape': keys.blur(); return;
+      case 'Escape':
+        if (zen) { e.preventDefault(); exitZen(); return; }
+        keys.blur();
+        return;
       default:
         if (e.repeat && e.key.length === 1 && !REPEATABLE.has(e.key)) e.preventDefault();
     }
@@ -930,6 +939,71 @@ export function mountEditor(root, { doc, navigate }) {
 
   /* chrome fades away while typing, returns when the mouse moves */
   let lastMove = null;
+  /* ---------------- zen mode: fullscreen, nothing but the page and the lamp ---------------- */
+  let zen = false;
+  let zenIdle = null;
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+
+  function wakeCursor() {
+    if (!zen) return;
+    editorEl.classList.remove('zen-idle');
+    clearTimeout(zenIdle);
+    zenIdle = setTimeout(() => zen && editorEl.classList.add('zen-idle'), 1400);
+  }
+
+  function enterZen() {
+    if (zen) return;
+    zen = true;
+    editorEl.classList.add('zen');
+    closeLampPop();
+    wakeCursor();
+    measure();
+    place('none');
+    focusKeys();
+    // Ask for real fullscreen, but never wait on it: some browsers or embeds
+    // refuse or never answer. Zen still hides everything either way.
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    let told = false;
+    const tell = () => {
+      if (told || !zen) return;
+      told = true;
+      toast(fsEl() ? 'Zen mode — press Esc to return' : 'Zen mode — press Esc or ⌘/Ctrl + Enter to return', 2400);
+    };
+    if (req && !fsEl()) {
+      try {
+        const p = req.call(el, { navigationUI: 'hide' });
+        if (p && p.then) p.then(tell, tell);
+        else setTimeout(tell, 300);
+      } catch { tell(); }
+      setTimeout(tell, 900);
+    } else {
+      tell();
+    }
+  }
+
+  function exitZen() {
+    if (!zen) return;
+    zen = false;
+    clearTimeout(zenIdle);
+    editorEl.classList.remove('zen', 'zen-idle');
+    if (fsEl()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      try { exit && exit.call(document); } catch { /* ignore */ }
+    }
+    measure();
+    place('none');
+    focusKeys();
+  }
+
+  function toggleZen() { if (zen) exitZen(); else enterZen(); }
+
+  // Leaving fullscreen with the browser's own Esc also leaves zen mode.
+  const onFullscreenChange = () => { if (zen && !fsEl()) exitZen(); };
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+  editorEl.addEventListener('pointermove', wakeCursor);
+
   editorEl.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse') return;
     if (lastMove && Math.hypot(e.clientX - lastMove.x, e.clientY - lastMove.y) < 12) return;
@@ -999,6 +1073,7 @@ export function mountEditor(root, { doc, navigate }) {
         applySettings({ sound: !settings.sound });
         return focusKeys();
       case 'settings': return openSettings();
+      case 'zen': return enterZen();
       case 'share': return openShare();
       case 'export': return openExport(b);
     }
@@ -1190,6 +1265,10 @@ export function mountEditor(root, { doc, navigate }) {
       document.body.style.removeProperty('--lamp-rgb');
       document.body.style.removeProperty('--lv');
       window.removeEventListener('resize', onResize);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+      clearTimeout(zenIdle);
+      if (zen && fsEl()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch { /* ignore */ } }
       window.removeEventListener('beforeunload', flush);
       document.removeEventListener('visibilitychange', onVis);
       if (dirty) {

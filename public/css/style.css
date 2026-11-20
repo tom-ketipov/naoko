@@ -563,6 +563,12 @@ body.page-editor .icon-btn:hover { background: rgba(140,160,220,.1); }
 .lamp-level input[type="range"]:focus-visible { outline: 1px solid var(--lt); outline-offset: 4px; }
 .lamp-pop .lamp-keys { margin-top: 10px; font-family: var(--mono-ui); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--lt-dim); }
 
+/* zen mode: nothing on screen but the page, the rail and the lamp */
+.editor.zen .ed-bar,
+.editor.zen .ed-status { display: none; }
+.editor.zen .desk { inset: 0; }
+.editor.zen-idle, .editor.zen-idle * { cursor: none !important; }
+
 /* ==========================================================================
    Paper & ink
    ========================================================================== */
