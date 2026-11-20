@@ -107,6 +107,7 @@ const SETTINGS_KEYS = {
   spacing: (v) => [1, 2].includes(v),
   face: (v) => ['elite', 'prime'].includes(v),
   margin: (v) => ['lock', 'wrap'].includes(v),
+  lamp: (v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v),
   cursor: (v) => typeof v === 'object' && v !== null && Number.isInteger(v.row) && Number.isInteger(v.col),
 };
 function sanitizeSettings(s) {

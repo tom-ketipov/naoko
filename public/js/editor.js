@@ -11,6 +11,19 @@ const BELL_BEFORE = 7;
 const PAGE_TOP = 72; // clear the floating toolbar in page view
 const SENTINEL = '​​';
 
+export const LAMP_PRESETS = [
+  ['#7d9bff', 'Moonlight'],
+  ['#ffb766', 'Tungsten'],
+  ['#ff8a3d', 'Candle'],
+  ['#ff4b3e', 'Darkroom'],
+  ['#ff7eb6', 'Neon rose'],
+  ['#b48cff', 'Violet'],
+  ['#8fe9ff', 'Ice'],
+  ['#6dff9b', 'Phosphor'],
+  ['#f4f1e8', 'Daylight'],
+];
+const HEX_RE = /^#[0-9a-f]{6}$/i;
+
 const EASE = {
   step: 'transform 55ms cubic-bezier(.2,.8,.3,1)',
   ret: 'transform 420ms cubic-bezier(.35,.0,.15,1)',
@@ -53,6 +66,7 @@ export function mountEditor(root, { doc, navigate }) {
       <button class="icon-btn ribbon-btn" data-act="ink" title="Switch ribbon colour" aria-label="Switch ribbon colour">
         <span class="ribbon"><i></i><i></i></span>
       </button>
+      <button class="icon-btn lamp-btn" data-act="lamp" title="Lamp colour" aria-label="Lamp colour" aria-haspopup="dialog"><span class="lamp-swatch"></span></button>
       <button class="icon-btn" data-act="sound" title="Sound" aria-label="Toggle sound"></button>
       <button class="icon-btn" data-act="settings" title="Typewriter settings" aria-label="Typewriter settings">${icons.settings}</button>
       <button class="icon-btn" data-act="export" title="Export" aria-label="Export">${icons.download}</button>
@@ -193,6 +207,94 @@ export function mountEditor(root, { doc, navigate }) {
       (settings.corrections === 'tape' ? 'Correction tape' : 'Purist — no erasing') +
       (settings.margin === 'wrap' ? ' · Auto-return' : ' · Margin lock');
     caret.classList.toggle('red', !!settings.ink);
+    applyLamp(settings.lamp);
+  }
+
+  /** Light colour of the carriage lamp: drives every glow via CSS variables. */
+  function applyLamp(hex) {
+    if (!HEX_RE.test(hex || '')) hex = '#7d9bff';
+    const n = parseInt(hex.slice(1), 16);
+    document.body.style.setProperty('--lamp', hex);
+    document.body.style.setProperty('--lamp-rgb', `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`);
+  }
+
+  function lampSwatches(cur) {
+    const presets = LAMP_PRESETS.map(
+      ([hex, name]) =>
+        `<button type="button" class="swatch" data-lamp="${hex}" title="${name}" aria-label="${name}" aria-pressed="${hex.toLowerCase() === String(cur).toLowerCase()}" style="--c:${hex}"></button>`
+    ).join('');
+    const custom = !LAMP_PRESETS.some(([h]) => h.toLowerCase() === String(cur).toLowerCase());
+    return `<div class="swatches">${presets}
+      <label class="swatch custom" title="Custom colour" aria-pressed="${custom}" style="--c:${cur}">
+        <input type="color" value="${cur}" aria-label="Custom lamp colour" /><span>+</span>
+      </label></div>`;
+  }
+
+  /** Wire a swatch block: live preview while dragging the custom picker, save on release. */
+  function bindSwatches(scope, onPick) {
+    scope.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-lamp]');
+      if (!b) return;
+      e.preventDefault();
+      setLamp(b.dataset.lamp, scope);
+      onPick && onPick();
+    });
+    const input = scope.querySelector('input[type="color"]');
+    input.addEventListener('input', () => applyLamp(input.value));
+    input.addEventListener('change', () => setLamp(input.value, scope));
+  }
+
+  function setLamp(hex, scope) {
+    applySettings({ lamp: hex.toLowerCase() });
+    document.querySelectorAll('.swatches').forEach((w) => {
+      let matched = false;
+      w.querySelectorAll('[data-lamp]').forEach((b) => {
+        const on = b.dataset.lamp.toLowerCase() === settings.lamp;
+        matched = matched || on;
+        b.setAttribute('aria-pressed', String(on));
+      });
+      const c = w.querySelector('.custom');
+      c.setAttribute('aria-pressed', String(!matched));
+      c.style.setProperty('--c', settings.lamp);
+      c.querySelector('input').value = settings.lamp;
+    });
+  }
+
+  let lampPop = null;
+  function closeLampPop() {
+    if (!lampPop) return;
+    lampPop.remove();
+    lampPop = null;
+    document.removeEventListener('pointerdown', onLampOutside, true);
+    document.removeEventListener('keydown', onLampKey, true);
+  }
+  function onLampOutside(e) {
+    if (lampPop && !lampPop.contains(e.target) && !e.target.closest('[data-act="lamp"]')) closeLampPop();
+  }
+  function onLampKey(e) {
+    if (e.key === 'Escape') { e.stopPropagation(); closeLampPop(); focusKeys(); }
+  }
+  function openLampPop(anchor) {
+    if (lampPop) { closeLampPop(); return focusKeys(); }
+    lampPop = document.createElement('div');
+    lampPop.className = 'lamp-pop';
+    lampPop.setAttribute('role', 'dialog');
+    lampPop.setAttribute('aria-label', 'Lamp colour');
+    lampPop.innerHTML = `<div class="lamp-pop-head"><span>Lamp</span><span class="lamp-hex">${settings.lamp}</span></div>${lampSwatches(settings.lamp)}`;
+    document.body.appendChild(lampPop);
+    const r = anchor.getBoundingClientRect();
+    const w = lampPop.offsetWidth;
+    lampPop.style.top = `${r.bottom + 8}px`;
+    lampPop.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+    bindSwatches(lampPop);
+    const hex = lampPop.querySelector('.lamp-hex');
+    lampPop.querySelector('input[type="color"]').addEventListener('input', (e) => { hex.textContent = e.target.value; });
+    lampPop.addEventListener('click', () => { hex.textContent = settings.lamp; });
+    setTimeout(() => {
+      document.addEventListener('pointerdown', onLampOutside, true);
+      document.addEventListener('keydown', onLampKey, true);
+    });
+    lampPop.querySelector('[aria-pressed="true"]')?.focus();
   }
 
   function renderAll() {
@@ -675,6 +777,7 @@ export function mountEditor(root, { doc, navigate }) {
         sound.roll();
         toast(settings.ink ? 'Ribbon shifted to red' : 'Ribbon shifted to black');
         return focusKeys();
+      case 'lamp': return openLampPop(b);
       case 'sound':
         applySettings({ sound: !settings.sound });
         return focusKeys();
@@ -715,13 +818,18 @@ export function mountEditor(root, { doc, navigate }) {
           ${opt('margin', 'lock', 'Lock with bell', settings.margin)}
           ${opt('margin', 'wrap', 'Auto-return words', settings.margin)}
         </fieldset>
+        <fieldset class="lamp-field"><legend>Lamp colour</legend>
+          ${lampSwatches(settings.lamp)}
+        </fieldset>
         <fieldset><legend>Sound</legend>
           <label class="switch"><input type="checkbox" name="sound" ${settings.sound ? 'checked' : ''}/><span>Key sounds</span></label>
           <input type="range" name="volume" min="0" max="1" step="0.05" value="${settings.volume}" aria-label="Volume" />
         </fieldset>
       </form>`, { onClose: focusKeys });
+    bindSwatches(m.el.querySelector('.lamp-field'));
     m.el.querySelector('form').addEventListener('change', (e) => {
       const t = e.target;
+      if (t.type === 'color') return;
       let v = t.type === 'checkbox' ? t.checked : t.value;
       if (['cols', 'spacing'].includes(t.name)) v = Number(v);
       if (t.name === 'volume') v = Number(v);
@@ -813,6 +921,9 @@ export function mountEditor(root, { doc, navigate }) {
     async destroy() {
       destroyed = true;
       clearTimeout(queueTimer);
+      closeLampPop();
+      document.body.style.removeProperty('--lamp');
+      document.body.style.removeProperty('--lamp-rgb');
       window.removeEventListener('resize', onResize);
       window.removeEventListener('beforeunload', flush);
       document.removeEventListener('visibilitychange', onVis);
