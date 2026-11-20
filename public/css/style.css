@@ -322,7 +322,7 @@ body.page-editor {
 .desk {
   position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: text; outline: none; user-select: none;
   background:
-    radial-gradient(40% 36% at 50% 50%, rgba(var(--lamp-rgb),.05), transparent 70%),
+    radial-gradient(45% 40% at 50% 50%, rgba(var(--lamp-rgb),.08), transparent 70%),
     var(--void);
 }
 .desk[data-view="page"] { background: radial-gradient(80% 60% at 50% 30%, #141824, var(--void)); }
@@ -353,14 +353,14 @@ body.page-editor {
 /* light falling off with distance: text far from the lamp sinks into the dark */
 .lamp-falloff {
   z-index: 5; left: -1600px; top: -1100px; width: 3200px; height: 2200px;
-  background: radial-gradient(circle at 50% 50%, rgba(7,8,12,0) 0, rgba(7,8,12,0) 140px, rgba(7,8,12,.22) 300px, rgba(7,8,12,.45) 520px, rgba(7,8,12,.62) 900px);
+  background: radial-gradient(circle at 50% 50%, rgba(7,8,12,0) 0, rgba(7,8,12,0) 200px, rgba(7,8,12,.14) 380px, rgba(7,8,12,.32) 640px, rgba(7,8,12,.5) 1000px);
 }
 /* the beam: soft-edged wedge, bright at the bulb, inverse-square-ish falloff */
 .lamp-cone {
-  z-index: 6; left: -260px; bottom: 0; width: 520px; height: 440px;
+  z-index: 6; left: -300px; bottom: 0; width: 600px; height: 500px;
   background:
-    radial-gradient(ellipse 22% 30% at 50% 100%, rgba(var(--lamp-rgb),.55), transparent 70%),
-    radial-gradient(ellipse 46% 100% at 50% 100%, rgba(var(--lamp-rgb),.30), rgba(var(--lamp-rgb),.12) 32%, rgba(var(--lamp-rgb),.04) 62%, transparent 88%);
+    radial-gradient(ellipse 22% 30% at 50% 100%, rgba(var(--lamp-rgb),.7), transparent 70%),
+    radial-gradient(ellipse 46% 100% at 50% 100%, rgba(var(--lamp-rgb),.4), rgba(var(--lamp-rgb),.17) 32%, rgba(var(--lamp-rgb),.06) 62%, transparent 88%);
   -webkit-mask-image: conic-gradient(from -34deg at 50% 100%, transparent 0deg, #000 16deg, #000 52deg, transparent 68deg, transparent 360deg);
   mask-image: conic-gradient(from -34deg at 50% 100%, transparent 0deg, #000 16deg, #000 52deg, transparent 68deg, transparent 360deg);
   filter: blur(6px);
@@ -369,15 +369,15 @@ body.page-editor {
 }
 /* colour of the light on the ink: brightens and tints letters, barely touches the dark */
 .lamp-tint {
-  z-index: 6; left: -340px; bottom: -6px; width: 680px; height: 330px;
-  background: radial-gradient(ellipse 48% 92% at 50% 100%, rgba(var(--lamp-rgb),.95), rgba(var(--lamp-rgb),.55) 28%, rgba(var(--lamp-rgb),.18) 58%, transparent 80%);
+  z-index: 6; left: -400px; bottom: -6px; width: 800px; height: 400px;
+  background: radial-gradient(ellipse 48% 92% at 50% 100%, rgba(var(--lamp-rgb),.95), rgba(var(--lamp-rgb),.65) 28%, rgba(var(--lamp-rgb),.26) 58%, transparent 85%);
   mix-blend-mode: overlay;
   animation: flicker 4.3s linear infinite;
 }
 /* bloom around the bulb */
 .lamp-bloom {
   z-index: 7; left: -110px; top: -55px; width: 220px; height: 110px;
-  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb),.55), rgba(var(--lamp-rgb),.16) 45%, transparent 72%);
+  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb),.68), rgba(var(--lamp-rgb),.2) 45%, transparent 72%);
   mix-blend-mode: screen;
   animation: flicker 4.3s linear infinite;
 }
@@ -461,8 +461,16 @@ body.page-editor {
 
 /* typed text in the dark: no paper, pale ink catching the lamp */
 .desk[data-view="carriage"] .sheet { background: none; box-shadow: none; }
+/* very faint guides in the dark: the paper's edge and its typing margins */
+.desk[data-view="carriage"] .sheet::before,
+.desk[data-view="carriage"] .sheet::after { content: ''; position: absolute; pointer-events: none; }
+.desk[data-view="carriage"] .sheet::before { inset: 0; border: 1px solid rgba(170,180,205,.035); }
+.desk[data-view="carriage"] .sheet::after {
+  inset: calc(var(--lh) * 6 - 8px) calc(var(--cw) * 10 - 8px);
+  border: 1px dashed rgba(170,180,205,.065);
+}
 .desk[data-view="carriage"] .sheet-num { display: none; }
-.desk[data-view="carriage"] .g { color: #a7aebd; text-shadow: 0 0 .6px rgba(195,205,230,.5); }
+.desk[data-view="carriage"] .g { color: #b4bbc9; text-shadow: 0 0 .6px rgba(195,205,230,.5); }
 .desk[data-view="carriage"] .g.red { color: #e47c6f; text-shadow: 0 0 .6px rgba(255,139,124,.5); }
 
 /* dialogs & toasts in the editor follow the dark room */
