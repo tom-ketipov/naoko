@@ -1,0 +1,22 @@
+{
+  "name": "nuvio",
+  "version": "1.0.0",
+  "description": "Nuvio — a typewriter-style document editor",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "pg": "^8.13.1"
+  }
+}

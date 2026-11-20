@@ -1,0 +1,831 @@
+// The typewriter: carriage, platen, margin bell and ribbon.
+import { api } from './api.js';
+import { sound } from './sound.js';
+import { icons } from './icons.js';
+import { Paper, CW, LH, MARGIN_COLS, withDefaults, linesToText, countWords } from './paper.js';
+import { toast, modal, escapeHtml, menu } from './ui.js';
+
+const MAX_ROWS = 4999;
+const TAB = 5;
+const BELL_BEFORE = 7;
+const SENTINEL = '​​';
+
+const EASE = {
+  step: 'transform 55ms cubic-bezier(.2,.8,.3,1)',
+  ret: 'transform 420ms cubic-bezier(.35,.0,.15,1)',
+  roll: 'transform 140ms cubic-bezier(.2,.8,.3,1)',
+  jump: 'transform 260ms cubic-bezier(.2,.8,.3,1)',
+  none: 'none',
+};
+
+export function mountEditor(root, { doc, navigate }) {
+  let settings = withDefaults(doc.settings);
+  const lines = (doc.content && doc.content.lines ? doc.content.lines : [[]]).map((l) => (Array.isArray(l) ? l : []));
+  let row = settings.cursor ? Math.min(settings.cursor.row, MAX_ROWS) : 0;
+  let col = settings.cursor ? Math.min(settings.cursor.col, settings.cols) : 0;
+  let view = localStorage.getItem('nuvio:view') === 'page' ? 'page' : 'carriage';
+  let scrollY = 0;
+  let title = doc.title;
+  let dirty = false;
+  let saving = false;
+  let saveTimer = null;
+  let statsTimer = null;
+  let queue = [];
+  let queueTimer = null;
+  let warnedMargin = false;
+  let destroyed = false;
+
+  sound.configure({ enabled: settings.sound, volume: settings.volume });
+
+  root.innerHTML = `
+  <div class="editor">
+    <header class="ed-bar">
+      <button class="icon-btn" data-act="home" title="All documents" aria-label="All documents">${icons.back}</button>
+      <a class="brand-sm" href="#/docs" aria-label="Nuvio home">nuvio</a>
+      <input class="ed-title" maxlength="120" spellcheck="false" aria-label="Document title" value="${escapeHtml(title)}" />
+      <span class="save-state" data-state="saved">Saved</span>
+      <div class="spacer"></div>
+      <div class="seg" role="tablist" aria-label="View">
+        <button data-view="carriage" role="tab">Carriage</button>
+        <button data-view="page" role="tab">Pages</button>
+      </div>
+      <button class="icon-btn ribbon-btn" data-act="ink" title="Switch ribbon colour" aria-label="Switch ribbon colour">
+        <span class="ribbon"><i></i><i></i></span>
+      </button>
+      <button class="icon-btn" data-act="sound" title="Sound" aria-label="Toggle sound"></button>
+      <button class="icon-btn" data-act="settings" title="Typewriter settings" aria-label="Typewriter settings">${icons.settings}</button>
+      <button class="icon-btn" data-act="export" title="Export" aria-label="Export">${icons.download}</button>
+      <button class="btn btn-primary btn-sm" data-act="share">${icons.share}<span>Share</span></button>
+    </header>
+    <main class="desk" data-view="carriage" tabindex="-1">
+      <div class="stage">
+        <div class="carriage">
+          <div class="roll"><div class="sheets"></div><div class="caret"></div></div>
+          <div class="scale"></div>
+          <div class="platen"><span class="knob l"></span><span class="knob r"></span></div>
+        </div>
+        <div class="guide"><span class="notch"></span></div>
+        <div class="typebar"></div>
+      </div>
+      <div class="machine">
+        <div class="machine-plate">
+          <span class="plate-brand">NUVIO</span>
+          <span class="plate-model">Standard No. 5</span>
+        </div>
+        <div class="dials">
+          <div class="dial"><b data-k="line">1</b><span>line</span></div>
+          <div class="dial"><b data-k="col">1</b><span>col</span></div>
+          <div class="dial"><b data-k="page">1</b><span>page</span></div>
+        </div>
+        <div class="machine-hint">Type anywhere · <kbd>Return</kbd> carriage return · <kbd>↑</kbd><kbd>↓</kbd> roll platen</div>
+      </div>
+      <textarea class="keys" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Typewriter keyboard input"></textarea>
+    </main>
+    <footer class="ed-status">
+      <span data-k="pos"></span>
+      <span data-k="words"></span>
+      <span data-k="mode"></span>
+      <span class="spacer"></span>
+      <span class="hint-k">Paste to auto-type</span>
+    </footer>
+  </div>`;
+
+  const $ = (sel) => root.querySelector(sel);
+  const desk = $('.desk');
+  const stage = $('.stage');
+  const carriage = $('.carriage');
+  const roll = $('.roll');
+  const caret = $('.caret');
+  const scaleEl = $('.scale');
+  const platen = $('.platen');
+  const guide = $('.guide');
+  const typebar = $('.typebar');
+  const keys = $('.keys');
+  const titleInput = $('.ed-title');
+  const saveState = $('.save-state');
+  const paper = new Paper($('.sheets'), settings);
+
+  /* ---------------------------------------------------------------- */
+  /* Rendering & geometry                                              */
+  /* ---------------------------------------------------------------- */
+  let geo = { s: 1, w: 0, h: 0, sx: 0, sy: 0 };
+
+  function measure() {
+    const r = desk.getBoundingClientRect();
+    const sheetW = paper.sheetW;
+    const s = view === 'page' ? Math.min(1, (r.width - 24) / sheetW) : Math.min(1, r.width / (CW * 48));
+    stage.style.zoom = s;
+    const w = r.width / s;
+    const h = r.height / s;
+    geo = { s, w, h, sx: Math.round(w / 2), sy: Math.round(h * (r.height < 520 ? 0.5 : 0.55)) };
+    stage.style.width = `${w}px`;
+    stage.style.height = `${h}px`;
+    paper.el.style.setProperty('--print-zoom', String(816 / sheetW));
+    const machineTop = geo.sy + 19 + 44;
+    desk.style.setProperty('--machine-top', `${machineTop * s}px`);
+    layoutFixtures();
+  }
+
+  function layoutFixtures() {
+    const { sx, sy } = geo;
+    scaleEl.style.top = `${sy + 5}px`;
+    platen.style.top = `${sy + 19}px`;
+    guide.style.left = `${sx - 42}px`;
+    guide.style.top = `${sy - LH - 8}px`;
+    typebar.style.left = `${sx - CW / 2}px`;
+    typebar.style.top = `${sy - LH + 2}px`;
+    buildScale();
+  }
+
+  function buildScale() {
+    const cols = settings.cols;
+    const left = MARGIN_COLS * CW;
+    scaleEl.style.left = `${left - 6 * CW}px`;
+    scaleEl.style.width = `${(cols + 12) * CW}px`;
+    let marks = '';
+    for (let c = 0; c <= cols; c += 10) marks += `<span class="num" style="left:${(c + 6) * CW}px">${c}</span>`;
+    marks += `<span class="stop" style="left:${6 * CW}px" title="Left margin"></span>`;
+    marks += `<span class="stop" style="left:${(cols + 6) * CW}px" title="Right margin"></span>`;
+    marks += `<span class="bellmark" style="left:${(cols - BELL_BEFORE + 6) * CW}px" title="Margin bell"></span>`;
+    scaleEl.innerHTML = marks;
+    platen.style.left = `${-40}px`;
+    platen.style.width = `${paper.sheetW + 80}px`;
+  }
+
+  function maxScroll() {
+    return Math.max(0, paper.totalHeight() - geo.h + 64);
+  }
+
+  function place(kind = 'step') {
+    const pos = paper.cellPos(row, col);
+    let x;
+    let y;
+    if (view === 'carriage') {
+      x = geo.sx - (pos.x + CW / 2);
+      y = geo.sy - LH - pos.y;
+    } else {
+      x = Math.round((geo.w - paper.sheetW) / 2);
+      y = 24 - scrollY;
+    }
+    carriage.style.transition = EASE[kind] || EASE.step;
+    roll.style.transition = view === 'carriage' ? EASE[kind === 'step' ? 'roll' : kind] || EASE.roll : EASE[kind === 'step' ? 'none' : kind];
+    carriage.style.transform = `translate3d(${x}px,0,0)`;
+    roll.style.transform = `translate3d(0,${y}px,0)`;
+    caret.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+    updateReadouts(pos.page);
+  }
+
+  /** In page view, keep the caret in sight. */
+  function followCaret() {
+    if (view !== 'page') return;
+    const { y } = paper.cellPos(row, col);
+    const top = y + 24 - scrollY;
+    if (top < 40) scrollY = Math.max(0, y - 80);
+    else if (top > geo.h - 80) scrollY = Math.min(maxScroll(), y - geo.h + 140);
+  }
+
+  function updateReadouts(page) {
+    const pages = Math.max(paper.sheets.length, page + 1);
+    root.querySelector('[data-k="line"]').textContent = (row % settings.linesPerPage) + 1;
+    root.querySelector('[data-k="col"]').textContent = col + 1;
+    root.querySelector('[data-k="page"]').textContent = page + 1;
+    root.querySelector('[data-k="pos"]').textContent = `Ln ${(row % settings.linesPerPage) + 1}, Col ${col + 1} · Page ${page + 1} of ${pages}`;
+  }
+
+  function updateStats() {
+    clearTimeout(statsTimer);
+    statsTimer = setTimeout(() => {
+      const w = countWords(lines);
+      root.querySelector('[data-k="words"]').textContent = `${w.toLocaleString()} word${w === 1 ? '' : 's'}`;
+    }, 250);
+  }
+
+  function updateChrome() {
+    desk.dataset.view = view;
+    root.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === view)));
+    root.querySelector('.ribbon-btn').dataset.ink = settings.ink ? 'red' : 'black';
+    root.querySelector('[data-act="sound"]').innerHTML = settings.sound ? icons.soundOn : icons.soundOff;
+    root.querySelector('[data-k="mode"]').textContent =
+      (settings.corrections === 'tape' ? 'Correction tape' : 'Purist — no erasing') +
+      (settings.margin === 'wrap' ? ' · Auto-return' : ' · Margin lock');
+    caret.classList.toggle('red', !!settings.ink);
+  }
+
+  function renderAll() {
+    paper.renderAll(lines, row + 1);
+    buildScale();
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Model                                                             */
+  /* ---------------------------------------------------------------- */
+  function lineAt(r) {
+    while (lines.length <= r) lines.push([]);
+    const l = lines[r];
+    for (let i = 0; i < l.length; i++) if (l[i] === undefined) l[i] = null;
+    return l;
+  }
+  const isBlank = (cell) => !cell || !cell.length || cell[cell.length - 1][0] === ' ';
+
+  function changed() {
+    dirty = true;
+    setSaveState('dirty');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 1200);
+    updateStats();
+  }
+
+  function ensurePageFor(r) {
+    const before = paper.sheets.length;
+    paper.ensurePages(Math.max(before, Math.floor(r / settings.linesPerPage) + 1));
+    return paper.sheets.length > before;
+  }
+
+  function animateStrike() {
+    typebar.classList.remove('hit');
+    void typebar.offsetWidth; // restart animation
+    typebar.classList.add('hit');
+    if (view === 'carriage') {
+      roll.classList.remove('jolt');
+      void roll.offsetWidth;
+      roll.classList.add('jolt');
+    }
+  }
+
+  function ringBellIfNeeded(prevCol) {
+    const mark = settings.cols - BELL_BEFORE;
+    if (prevCol < mark && col >= mark) setTimeout(() => sound.bell(), 30);
+  }
+
+  function lockAtMargin() {
+    sound.lock();
+    desk.classList.remove('shake');
+    void desk.offsetWidth;
+    desk.classList.add('shake');
+    if (!warnedMargin) {
+      warnedMargin = true;
+      toast('Carriage locked at the right margin — press Return.');
+    }
+  }
+
+  function strike(ch) {
+    if (ch === '\n' || ch === '\r') return carriageReturn(true);
+    if (ch === '\t') return tab();
+    if (col >= settings.cols) {
+      if (settings.margin === 'wrap') {
+        if (ch === ' ') return carriageReturn(true);
+        if (!wrapWord()) return lockAtMargin();
+      } else {
+        return lockAtMargin();
+      }
+    }
+    const prev = col;
+    if (ch === ' ') {
+      sound.space();
+      col++;
+    } else {
+      const line = lineAt(row);
+      while (line.length < col) line.push(null);
+      const cell = line[col] ? line[col] : [];
+      if (cell.length >= 8) cell.shift();
+      cell.push([ch, settings.ink]);
+      line[col] = cell;
+      paper.renderLine(row, line);
+      sound.key(/[A-Z#@%&$WM]/.test(ch));
+      animateStrike();
+      col++;
+      changed();
+    }
+    ringBellIfNeeded(prev);
+    place('step');
+    followCaret();
+  }
+
+  function wrapWord() {
+    const line = lineAt(row);
+    let start = col;
+    while (start > 0 && !isBlank(line[start - 1])) start--;
+    if (start === 0 || row >= MAX_ROWS) return false;
+    const word = line.slice(start, col);
+    for (let i = start; i < col; i++) line[i] = null;
+    paper.renderLine(row, line);
+    carriageReturn(true, true);
+    const next = lineAt(row);
+    word.forEach((cell, i) => {
+      while (next.length < i) next.push(null);
+      next[i] = next[i] ? next[i].concat(cell || []) : cell;
+    });
+    col = word.length;
+    paper.renderLine(row, next);
+    changed();
+    return true;
+  }
+
+  function carriageReturn(feed = true, quiet = false) {
+    const spacing = settings.spacing || 1;
+    col = 0;
+    if (feed) {
+      if (row + spacing > MAX_ROWS) return lockAtMargin();
+      row += spacing;
+      const newPage = ensurePageFor(row);
+      if (!quiet) {
+        if (newPage) {
+          sound.feed();
+          toast(`Fresh sheet — page ${Math.floor(row / settings.linesPerPage) + 1}`);
+        } else sound.ret();
+      }
+    } else if (!quiet) sound.ret();
+    place('ret');
+    followCaret();
+    persistCursorSoon();
+  }
+
+  function backspace() {
+    if (col === 0) {
+      sound.lock();
+      return;
+    }
+    col--;
+    if (settings.corrections === 'tape') {
+      const line = lineAt(row);
+      const cell = line[col];
+      if (cell && cell.length) {
+        cell.pop();
+        if (!cell.length) line[col] = null;
+        paper.renderLine(row, line);
+        changed();
+        sound.back();
+        sound.space();
+      } else sound.back();
+    } else sound.back();
+    place('step');
+    followCaret();
+    persistCursorSoon();
+  }
+
+  function tab() {
+    const next = Math.min(settings.cols, (Math.floor(col / TAB) + 1) * TAB);
+    if (next === col) return lockAtMargin();
+    const prev = col;
+    col = next;
+    sound.space();
+    ringBellIfNeeded(prev);
+    place('jump');
+    followCaret();
+    persistCursorSoon();
+  }
+
+  function rollPlaten(delta) {
+    const next = Math.max(0, Math.min(MAX_ROWS, row + delta));
+    if (next === row) return;
+    row = next;
+    const newPage = ensurePageFor(row);
+    if (newPage) sound.feed();
+    else sound.roll();
+    place('roll');
+    followCaret();
+    persistCursorSoon();
+  }
+
+  function moveCol(delta) {
+    const next = Math.max(0, Math.min(settings.cols, col + delta));
+    if (next === col) return sound.lock();
+    const prev = col;
+    col = next;
+    delta > 0 ? sound.space() : sound.back();
+    ringBellIfNeeded(prev);
+    place('step');
+    followCaret();
+    persistCursorSoon();
+  }
+
+  function setCursor(r, c) {
+    row = Math.max(0, Math.min(MAX_ROWS, r));
+    col = Math.max(0, Math.min(settings.cols, c));
+    ensurePageFor(row);
+    sound.ret();
+    place('jump');
+    persistCursorSoon();
+  }
+
+  let cursorTimer = null;
+  function persistCursorSoon() {
+    clearTimeout(cursorTimer);
+    cursorTimer = setTimeout(() => {
+      if (!dirty) {
+        dirty = true;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(save, 1500);
+      }
+    }, 800);
+  }
+
+  /* auto-typing queue for pasted text */
+  function enqueue(text) {
+    const chars = Array.from(text.replace(/\r\n?/g, '\n')).slice(0, 20000);
+    queue.push(...chars);
+    if (!queueTimer) pump();
+  }
+  function pump() {
+    if (destroyed) return;
+    const ch = queue.shift();
+    if (ch === undefined) {
+      queueTimer = null;
+      desk.classList.remove('autotyping');
+      return;
+    }
+    desk.classList.add('autotyping');
+    strike(ch);
+    queueTimer = setTimeout(pump, ch === '\n' ? 260 : ch === ' ' ? 30 : 38 + Math.random() * 30);
+  }
+  function type(text) {
+    if (queueTimer) return enqueue(text);
+    for (const ch of Array.from(text)) strike(ch);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Saving                                                            */
+  /* ---------------------------------------------------------------- */
+  function setSaveState(s) {
+    saveState.dataset.state = s;
+    saveState.textContent = { dirty: 'Unsaved', saving: 'Saving…', saved: 'Saved', error: 'Offline — retrying' }[s];
+  }
+
+  function snapshot() {
+    let last = lines.length - 1;
+    while (last >= 0 && !(lines[last] || []).some((c) => c && c.length)) last--;
+    const out = [];
+    for (let r = 0; r <= last; r++) {
+      const l = (lines[r] || []).map((c) => (c && c.length ? c : null));
+      while (l.length && l[l.length - 1] === null) l.pop();
+      out.push(l);
+    }
+    return {
+      title,
+      content: { v: 1, lines: out },
+      settings: { ...settings, cursor: { row, col } },
+    };
+  }
+
+  async function save(opts = {}) {
+    clearTimeout(saveTimer);
+    if (!dirty || destroyed && !opts.keepalive) return;
+    if (saving) {
+      saveTimer = setTimeout(save, 600);
+      return;
+    }
+    saving = true;
+    dirty = false;
+    setSaveState('saving');
+    try {
+      await api.saveDoc(doc.id, snapshot(), opts);
+      if (!dirty) setSaveState('saved');
+    } catch (e) {
+      dirty = true;
+      if (e.status === 401) {
+        toast('Your session expired. Please sign in again.');
+        navigate('#/login');
+        return;
+      }
+      setSaveState('error');
+      saveTimer = setTimeout(save, 4000);
+    } finally {
+      saving = false;
+    }
+  }
+
+  function flush() {
+    if (dirty) save({ keepalive: true });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Input                                                             */
+  /* ---------------------------------------------------------------- */
+  function resetKeys() {
+    keys.value = SENTINEL;
+    keys.setSelectionRange(SENTINEL.length, SENTINEL.length);
+  }
+
+  function focusKeys() {
+    keys.focus({ preventScroll: true });
+    resetKeys();
+    sound.unlock();
+  }
+
+  let composing = false;
+  keys.addEventListener('compositionstart', () => { composing = true; });
+  keys.addEventListener('compositionend', () => {
+    composing = false;
+    readKeys();
+  });
+  keys.addEventListener('input', () => {
+    if (!composing) readKeys();
+  });
+  function readKeys() {
+    const v = keys.value;
+    if (v.length < SENTINEL.length && !v.replace(/​/g, '').length) {
+      backspace();
+    } else {
+      const text = v.replace(/​/g, '');
+      if (text) type(text);
+    }
+    resetKeys();
+  }
+
+  const REPEATABLE = new Set([' ', 'x', 'X', '-', '_', '.', '=', '*']);
+  keys.addEventListener('keydown', (e) => {
+    sound.unlock();
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      dirty = true;
+      save();
+      return;
+    }
+    if (mod || e.altKey && e.key.length > 1) return;
+    if (composing || e.isComposing) return;
+    switch (e.key) {
+      case 'Enter': e.preventDefault(); if (!e.repeat) type('\n'); return;
+      case 'Backspace': e.preventDefault(); if (queueTimer) return; backspace(); return;
+      case 'Tab': e.preventDefault(); type('\t'); return;
+      case 'ArrowUp': e.preventDefault(); rollPlaten(-1); return;
+      case 'ArrowDown': e.preventDefault(); rollPlaten(1); return;
+      case 'ArrowLeft': e.preventDefault(); moveCol(-1); return;
+      case 'ArrowRight': e.preventDefault(); moveCol(1); return;
+      case 'Home': e.preventDefault(); if (col) carriageReturn(false); return;
+      case 'PageDown': e.preventDefault(); rollPlaten(settings.linesPerPage - (row % settings.linesPerPage)); return;
+      case 'PageUp': e.preventDefault(); rollPlaten(-((row % settings.linesPerPage) || settings.linesPerPage)); return;
+      case 'Escape': keys.blur(); return;
+      default:
+        if (e.repeat && e.key.length === 1 && !REPEATABLE.has(e.key)) e.preventDefault();
+    }
+  });
+
+  keys.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    if (text) {
+      if (text.length > 400) toast(`Auto-typing ${text.length.toLocaleString()} characters…`);
+      enqueue(text);
+    }
+  });
+  keys.addEventListener('focus', () => desk.classList.add('focused'));
+  keys.addEventListener('blur', () => desk.classList.remove('focused'));
+
+  /* pointer: click to position, wheel / drag to roll or scroll */
+  let drag = null;
+  let wheelAcc = 0;
+  desk.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    drag = { x: e.clientX, y: e.clientY, startScroll: scrollY, startRow: row, moved: false, id: e.pointerId };
+  });
+  desk.addEventListener('pointermove', (e) => {
+    if (!drag || drag.id !== e.pointerId) return;
+    const dy = e.clientY - drag.y;
+    if (Math.abs(dy) > 6 || Math.abs(e.clientX - drag.x) > 6) drag.moved = true;
+    if (!drag.moved || e.pointerType === 'mouse') return;
+    if (view === 'page') {
+      scrollY = Math.max(0, Math.min(maxScroll(), drag.startScroll - dy / geo.s));
+      place('none');
+    } else {
+      const target = drag.startRow - Math.round(dy / geo.s / LH);
+      if (target !== row) rollPlaten(target - row);
+    }
+  });
+  desk.addEventListener('pointerup', (e) => {
+    const d = drag;
+    drag = null;
+    if (!d || d.moved || e.target.closest('.machine')) {
+      focusKeys();
+      return;
+    }
+    const sheets = paper.el.getBoundingClientRect();
+    if (e.clientY >= sheets.top && e.clientY <= sheets.bottom && e.clientX >= sheets.left && e.clientX <= sheets.right) {
+      const hit = paper.hit((e.clientX - sheets.left) / geo.s, (e.clientY - sheets.top) / geo.s);
+      if (hit.row !== row || hit.col !== col) setCursor(hit.row, hit.col);
+    }
+    focusKeys();
+  });
+  desk.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      if (view === 'page') {
+        scrollY = Math.max(0, Math.min(maxScroll(), scrollY + e.deltaY / geo.s));
+        place('none');
+        return;
+      }
+      wheelAcc += e.deltaY;
+      const step = 70;
+      while (Math.abs(wheelAcc) >= step) {
+        rollPlaten(wheelAcc > 0 ? 1 : -1);
+        wheelAcc -= Math.sign(wheelAcc) * step;
+      }
+    },
+    { passive: false }
+  );
+
+  /* ---------------------------------------------------------------- */
+  /* Toolbar                                                           */
+  /* ---------------------------------------------------------------- */
+  titleInput.addEventListener('input', () => {
+    title = titleInput.value;
+    document.title = `${title || 'Untitled'} — Nuvio`;
+    changed();
+  });
+  titleInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === 'Escape') {
+      e.preventDefault();
+      if (!titleInput.value.trim()) titleInput.value = title = 'Untitled';
+      focusKeys();
+    }
+  });
+
+  function setView(v) {
+    if (view === v) return;
+    view = v;
+    try { localStorage.setItem('nuvio:view', v); } catch { /* ignore */ }
+    if (v === 'page') {
+      const { y } = paper.cellPos(row, col);
+      measure();
+      scrollY = Math.max(0, Math.min(maxScroll(), y - geo.h * 0.4));
+    } else measure();
+    updateChrome();
+    place('jump');
+    focusKeys();
+  }
+
+  function applySettings(patch) {
+    const relayout = ['cols', 'face', 'paper', 'linesPerPage'].some((k) => patch[k] !== undefined && patch[k] !== settings[k]);
+    settings = { ...settings, ...patch };
+    sound.configure({ enabled: settings.sound, volume: settings.volume });
+    if (relayout) {
+      col = Math.min(col, settings.cols);
+      paper.setSettings(settings);
+      renderAll();
+      measure();
+    }
+    updateChrome();
+    place('jump');
+    changed();
+  }
+
+  root.querySelector('.ed-bar').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.view) return setView(b.dataset.view);
+    switch (b.dataset.act) {
+      case 'home': return navigate('#/docs');
+      case 'ink':
+        applySettings({ ink: settings.ink ? 0 : 1 });
+        sound.roll();
+        toast(settings.ink ? 'Ribbon shifted to red' : 'Ribbon shifted to black');
+        return focusKeys();
+      case 'sound':
+        applySettings({ sound: !settings.sound });
+        return focusKeys();
+      case 'settings': return openSettings();
+      case 'share': return openShare();
+      case 'export': return openExport(b);
+    }
+  });
+
+  function openSettings() {
+    const opt = (name, value, label, cur) =>
+      `<label class="chip"><input type="radio" name="${name}" value="${value}" ${String(cur) === String(value) ? 'checked' : ''}/><span>${label}</span></label>`;
+    const m = modal(`
+      <h2>Typewriter</h2>
+      <form class="settings">
+        <fieldset><legend>Typeface</legend>
+          ${opt('face', 'elite', '<span style="font-family:\'Special Elite\'">Elite</span>', settings.face)}
+          ${opt('face', 'prime', '<span style="font-family:\'Courier Prime\'">Pica</span>', settings.face)}
+        </fieldset>
+        <fieldset><legend>Paper</legend>
+          ${opt('paper', 'ivory', 'Ivory bond', settings.paper)}
+          ${opt('paper', 'white', 'Bright white', settings.paper)}
+          ${opt('paper', 'manila', 'Manila', settings.paper)}
+          ${opt('paper', 'onion', 'Onionskin', settings.paper)}
+        </fieldset>
+        <fieldset><legend>Line width</legend>
+          ${[50, 60, 65, 72, 80].map((c) => opt('cols', c, `${c}`, settings.cols)).join('')}
+        </fieldset>
+        <fieldset><legend>Line spacing</legend>
+          ${opt('spacing', 1, 'Single', settings.spacing)}
+          ${opt('spacing', 2, 'Double', settings.spacing)}
+        </fieldset>
+        <fieldset><legend>Backspace</legend>
+          ${opt('corrections', 'none', 'Purist — moves carriage only', settings.corrections)}
+          ${opt('corrections', 'tape', 'Correction tape — lifts off', settings.corrections)}
+        </fieldset>
+        <fieldset><legend>Right margin</legend>
+          ${opt('margin', 'lock', 'Lock with bell', settings.margin)}
+          ${opt('margin', 'wrap', 'Auto-return words', settings.margin)}
+        </fieldset>
+        <fieldset><legend>Sound</legend>
+          <label class="switch"><input type="checkbox" name="sound" ${settings.sound ? 'checked' : ''}/><span>Key sounds</span></label>
+          <input type="range" name="volume" min="0" max="1" step="0.05" value="${settings.volume}" aria-label="Volume" />
+        </fieldset>
+      </form>`, { onClose: focusKeys });
+    m.el.querySelector('form').addEventListener('change', (e) => {
+      const t = e.target;
+      let v = t.type === 'checkbox' ? t.checked : t.value;
+      if (['cols', 'spacing'].includes(t.name)) v = Number(v);
+      if (t.name === 'volume') v = Number(v);
+      applySettings({ [t.name]: v });
+      if (t.name === 'volume' || t.name === 'sound') sound.key();
+    });
+  }
+
+  async function openShare() {
+    const linkFor = (tok) => `${location.origin}/#/s/${tok}`;
+    let token = doc.shareToken;
+    const m = modal(`
+      <h2>Share “${escapeHtml(title || 'Untitled')}”</h2>
+      <p class="muted">Anyone with the link can read the typed pages. Only you can type on them.</p>
+      <label class="switch big"><input type="checkbox" class="share-toggle" ${token ? 'checked' : ''}/><span>Link sharing</span></label>
+      <div class="share-row" ${token ? '' : 'hidden'}>
+        <input class="input share-link" readonly value="${token ? linkFor(token) : ''}" />
+        <button class="btn" data-copy>${icons.copy}<span>Copy</span></button>
+      </div>`, { onClose: focusKeys });
+    const row_ = m.el.querySelector('.share-row');
+    const linkInput = m.el.querySelector('.share-link');
+    m.el.querySelector('.share-toggle').addEventListener('change', async (e) => {
+      try {
+        const r = await api.share(doc.id, e.target.checked);
+        token = doc.shareToken = r.shareToken;
+        row_.hidden = !token;
+        linkInput.value = token ? linkFor(token) : '';
+      } catch (err) {
+        e.target.checked = !e.target.checked;
+        toast(err.message);
+      }
+    });
+    m.el.querySelector('[data-copy]').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(linkInput.value);
+        toast('Link copied');
+      } catch {
+        linkInput.select();
+      }
+    });
+  }
+
+  function openExport(anchor) {
+    menu(anchor, [
+      { icon: icons.download, label: 'Download as .txt', run: downloadTxt },
+      { icon: icons.print, label: 'Print / save as PDF', run: () => window.print() },
+    ]);
+  }
+
+  function downloadTxt() {
+    const blob = new Blob([linesToText(lines) + '\n'], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(title || 'Untitled').replace(/[^\w\- ]+/g, '').trim() || 'nuvio'}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Lifecycle                                                         */
+  /* ---------------------------------------------------------------- */
+  const onResize = () => { measure(); place('none'); };
+  const onVis = () => { if (document.visibilityState === 'hidden') flush(); };
+  window.addEventListener('resize', onResize);
+  window.addEventListener('beforeunload', flush);
+  document.addEventListener('visibilitychange', onVis);
+
+  document.title = `${title || 'Untitled'} — Nuvio`;
+  renderAll();
+  updateChrome();
+  updateStats();
+  measure();
+  if (view === 'page') {
+    const { y } = paper.cellPos(row, col);
+    scrollY = Math.max(0, Math.min(maxScroll(), y - geo.h * 0.4));
+  }
+  place('none');
+  resetKeys();
+  requestAnimationFrame(() => {
+    focusKeys();
+    document.fonts && document.fonts.ready.then(() => !destroyed && place('none'));
+  });
+  if (!localStorage.getItem('nuvio:welcomed')) {
+    try { localStorage.setItem('nuvio:welcomed', '1'); } catch { /* ignore */ }
+    setTimeout(() => toast('Just start typing. Listen for the bell near the margin.'), 600);
+  }
+
+  return {
+    async destroy() {
+      destroyed = true;
+      clearTimeout(queueTimer);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onVis);
+      if (dirty) {
+        dirty = true;
+        await save({ keepalive: true }).catch(() => {});
+      }
+    },
+  };
+}
