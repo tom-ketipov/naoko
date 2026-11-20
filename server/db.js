@@ -237,7 +237,7 @@ function createFileStore(file) {
 
 function createStore() {
   if (process.env.DATABASE_URL) return createPgStore(process.env.DATABASE_URL);
-  const file = process.env.DATA_FILE || path.join(__dirname, '..', 'data', 'nuvio.json');
+  const file = process.env.DATA_FILE || path.join(__dirname, '..', 'data', 'naoko.json');
   return createFileStore(file);
 }
 

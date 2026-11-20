@@ -1,4 +1,4 @@
-// Thin JSON client for the Nuvio API.
+// Thin JSON client for the Naoko API.
 async function request(method, url, body, opts = {}) {
   const res = await fetch(url, {
     method,

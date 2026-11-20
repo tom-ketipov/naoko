@@ -1,4 +1,4 @@
-# Nuvio
+# Naoko
 
 A document editor that behaves like a typewriter. You type onto paper held in a carriage: the paper slides left with every keystroke, a bell rings 7 characters before the right margin, the carriage locks at the margin, and Return slams it back. Every letter is inked a little differently, and documents are saved to your account like in Google Docs.
 
@@ -20,7 +20,7 @@ A document editor that behaves like a typewriter. You type onto paper held in a 
 ## Stack
 
 - **Backend**: Node 20+ and Express (`server/`). Cookie sessions, bcrypt-hashed passwords, rate-limited auth, Helmet CSP.
-- **Storage**: PostgreSQL when `DATABASE_URL` is set. Without it, a local JSON file at `data/nuvio.json` (for development only).
+- **Storage**: PostgreSQL when `DATABASE_URL` is set. Without it, a local JSON file at `data/naoko.json` (for development only).
 - **Frontend**: plain ES modules with no build step (`public/`).
 
 ## Run locally
@@ -36,8 +36,8 @@ Then open http://localhost:3000 and create an account.
 
 1. Push this folder to a GitHub/GitLab repo.
 2. In Render, choose **New → Blueprint** and select the repo. `render.yaml` creates:
-   - `nuvio`, a Node web service (`npm start`, health check at `/healthz`)
-   - `nuvio-db`, a Postgres database whose `DATABASE_URL` is injected automatically
+   - `naoko`, a Node web service (`npm start`, health check at `/healthz`)
+   - `naoko-db`, a Postgres database whose `DATABASE_URL` is injected automatically
 3. Deploy. The tables are created on first boot.
 
 > On Render's free plan the local disk is wiped on every deploy, so production must use Postgres (the Blueprint sets this up). Free Postgres instances expire after a limited period, so upgrade the database plan to keep the data.

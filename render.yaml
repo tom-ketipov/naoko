@@ -1,9 +1,9 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
 # New > Blueprint in the Render dashboard, point it at this repo, and it will
-# create the "nuvio" web service plus a Postgres database wired together.
+# create the "naoko" web service plus a Postgres database wired together.
 services:
   - type: web
-    name: nuvio
+    name: naoko
     runtime: node
     plan: free
     buildCommand: npm ci --omit=dev
@@ -17,11 +17,11 @@ services:
         value: "22"
       - key: DATABASE_URL
         fromDatabase:
-          name: nuvio-db
+          name: naoko-db
           property: connectionString
 
 databases:
-  - name: nuvio-db
+  - name: naoko-db
     plan: free
-    databaseName: nuvio
-    user: nuvio
+    databaseName: naoko
+    user: naoko

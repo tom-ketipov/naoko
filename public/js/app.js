@@ -38,7 +38,7 @@ async function route() {
 /* Auth                                                                */
 /* ------------------------------------------------------------------ */
 function showAuth(mode) {
-  document.title = 'Nuvio — Typewriter Documents';
+  document.title = 'Naoko — Typewriter Documents';
   document.body.className = 'page-auth';
   app.innerHTML = `
   <div class="auth">
@@ -49,7 +49,7 @@ function showAuth(mode) {
       <div class="hero-platen"></div>
     </section>
     <section class="auth-panel">
-      <div class="logo">nuvio<span>.</span></div>
+      <div class="logo">naoko<span>.</span></div>
       <p class="tagline">Documents with the soul of a typewriter. Carriage returns, a margin bell, ribbon ink — saved to the cloud.</p>
       <div class="tabs" role="tablist">
         <button role="tab" data-mode="login" aria-selected="${mode === 'login'}">Sign in</button>
@@ -121,12 +121,12 @@ function showAuth(mode) {
 /* Document list                                                       */
 /* ------------------------------------------------------------------ */
 async function showDocs() {
-  document.title = 'Your documents — Nuvio';
+  document.title = 'Your documents — Naoko';
   document.body.className = 'page-docs';
   app.innerHTML = `
   <div class="docs">
     <header class="topbar">
-      <a class="logo sm" href="#/docs">nuvio<span>.</span></a>
+      <a class="logo sm" href="#/docs">naoko<span>.</span></a>
       <div class="spacer"></div>
       <span class="who">${escapeHtml(user.name)}</span>
       <button class="icon-btn" data-act="logout" title="Sign out" aria-label="Sign out">${icons.logout}</button>
@@ -283,15 +283,15 @@ async function showShared(token) {
   app.innerHTML = `<div class="boot"><div class="boot-mark">N</div></div>`;
   try {
     const { doc } = await api.shared(token);
-    document.title = `${doc.title} — Nuvio`;
+    document.title = `${doc.title} — Naoko`;
     app.innerHTML = `
       <div class="shared">
         <header class="topbar">
-          <a class="logo sm" href="#/">nuvio<span>.</span></a>
+          <a class="logo sm" href="#/">naoko<span>.</span></a>
           <div class="shared-title"><b>${escapeHtml(doc.title)}</b><span>typed by ${escapeHtml(doc.author)} · ${timeAgo(doc.updatedAt)}</span></div>
           <div class="spacer"></div>
           <button class="icon-btn" data-print title="Print" aria-label="Print">${icons.print}</button>
-          <a class="btn btn-primary btn-sm" href="#/${user ? 'docs' : 'register'}">${user ? 'My documents' : 'Try Nuvio'}</a>
+          <a class="btn btn-primary btn-sm" href="#/${user ? 'docs' : 'register'}">${user ? 'My documents' : 'Try Naoko'}</a>
         </header>
         <main class="shared-desk"><div class="shared-stage"><div class="sheets"></div></div></main>
       </div>`;
@@ -308,7 +308,7 @@ async function showShared(token) {
     app.querySelector('[data-print]').onclick = () => window.print();
     current = { destroy() { window.removeEventListener('resize', fit); } };
   } catch (e) {
-    app.innerHTML = `<div class="notfound"><div class="logo">nuvio<span>.</span></div><p>${escapeHtml(e.message)}</p><a class="btn" href="#/">Go home</a></div>`;
+    app.innerHTML = `<div class="notfound"><div class="logo">naoko<span>.</span></div><p>${escapeHtml(e.message)}</p><a class="btn" href="#/">Go home</a></div>`;
   }
 }
 

@@ -9,7 +9,7 @@ const { createStore } = require('./db');
 
 const PORT = process.env.PORT || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
-const SESSION_COOKIE = 'nuvio_session';
+const SESSION_COOKIE = 'naoko_session';
 const SESSION_DAYS = 30;
 const MAX_LINES = 5000;
 const MAX_COLS = 120;
@@ -343,7 +343,7 @@ app.use((err, req, res, next) => {
 store
   .init()
   .then(() => {
-    app.listen(PORT, () => console.log(`Nuvio listening on :${PORT} (store: ${store.kind})`));
+    app.listen(PORT, () => console.log(`Naoko listening on :${PORT} (store: ${store.kind})`));
   })
   .catch((e) => {
     console.error('Failed to initialise storage', e);

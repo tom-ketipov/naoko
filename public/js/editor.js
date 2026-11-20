@@ -23,7 +23,7 @@ export function mountEditor(root, { doc, navigate }) {
   const lines = (doc.content && doc.content.lines ? doc.content.lines : [[]]).map((l) => (Array.isArray(l) ? l : []));
   let row = settings.cursor ? Math.min(settings.cursor.row, MAX_ROWS) : 0;
   let col = settings.cursor ? Math.min(settings.cursor.col, settings.cols) : 0;
-  let view = localStorage.getItem('nuvio:view') === 'page' ? 'page' : 'carriage';
+  let view = localStorage.getItem('naoko:view') === 'page' ? 'page' : 'carriage';
   let scrollY = 0;
   let title = doc.title;
   let dirty = false;
@@ -41,7 +41,7 @@ export function mountEditor(root, { doc, navigate }) {
   <div class="editor">
     <header class="ed-bar">
       <button class="icon-btn" data-act="home" title="All documents" aria-label="All documents">${icons.back}</button>
-      <a class="brand-sm" href="#/docs" aria-label="Nuvio home">nuvio</a>
+      <a class="brand-sm" href="#/docs" aria-label="Naoko home">naoko</a>
       <input class="ed-title" maxlength="120" spellcheck="false" aria-label="Document title" value="${escapeHtml(title)}" />
       <span class="save-state" data-state="saved">Saved</span>
       <div class="spacer"></div>
@@ -69,7 +69,7 @@ export function mountEditor(root, { doc, navigate }) {
       </div>
       <div class="machine">
         <div class="machine-plate">
-          <span class="plate-brand">NUVIO</span>
+          <span class="plate-brand">NAOKO</span>
           <span class="plate-model">Standard No. 5</span>
         </div>
         <div class="dials">
@@ -630,7 +630,7 @@ export function mountEditor(root, { doc, navigate }) {
   /* ---------------------------------------------------------------- */
   titleInput.addEventListener('input', () => {
     title = titleInput.value;
-    document.title = `${title || 'Untitled'} — Nuvio`;
+    document.title = `${title || 'Untitled'} — Naoko`;
     changed();
   });
   titleInput.addEventListener('keydown', (e) => {
@@ -644,7 +644,7 @@ export function mountEditor(root, { doc, navigate }) {
   function setView(v) {
     if (view === v) return;
     view = v;
-    try { localStorage.setItem('nuvio:view', v); } catch { /* ignore */ }
+    try { localStorage.setItem('naoko:view', v); } catch { /* ignore */ }
     if (v === 'page') {
       const { y } = paper.cellPos(row, col);
       measure();
@@ -781,7 +781,7 @@ export function mountEditor(root, { doc, navigate }) {
     const blob = new Blob([linesToText(lines) + '\n'], { type: 'text/plain;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${(title || 'Untitled').replace(/[^\w\- ]+/g, '').trim() || 'nuvio'}.txt`;
+    a.download = `${(title || 'Untitled').replace(/[^\w\- ]+/g, '').trim() || 'naoko'}.txt`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
@@ -795,7 +795,7 @@ export function mountEditor(root, { doc, navigate }) {
   window.addEventListener('beforeunload', flush);
   document.addEventListener('visibilitychange', onVis);
 
-  document.title = `${title || 'Untitled'} — Nuvio`;
+  document.title = `${title || 'Untitled'} — Naoko`;
   renderAll();
   updateChrome();
   updateStats();
@@ -810,8 +810,8 @@ export function mountEditor(root, { doc, navigate }) {
     focusKeys();
     document.fonts && document.fonts.ready.then(() => !destroyed && place('none'));
   });
-  if (!localStorage.getItem('nuvio:welcomed')) {
-    try { localStorage.setItem('nuvio:welcomed', '1'); } catch { /* ignore */ }
+  if (!localStorage.getItem('naoko:welcomed')) {
+    try { localStorage.setItem('naoko:welcomed', '1'); } catch { /* ignore */ }
     setTimeout(() => toast('Just start typing. Listen for the bell near the margin.'), 600);
   }
 
