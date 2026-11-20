@@ -19,6 +19,7 @@ export const DEFAULTS = {
   corrections: 'none',
   margin: 'lock',
   lamp: '#7d9bff',
+  lampLevel: 1,
 };
 
 export function withDefaults(s) {

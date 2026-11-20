@@ -279,6 +279,7 @@ body.page-editor {
   --lt-dim: #7e889e;        /* chrome text */
   --lamp: #7d9bff;           /* overridden live by the lamp colour picker */
   --lamp-rgb: 125, 155, 255;
+  --lv: 1;                   /* lamp intensity, 0.25–1.75, set by the light slider */
   --lamp-2: color-mix(in srgb, var(--lamp) 68%, #000);
   --lamp-hi: color-mix(in srgb, var(--lamp) 55%, #fff);
   --lamp-hi-2: color-mix(in srgb, var(--lamp) 25%, #fff);
@@ -338,7 +339,7 @@ body.page-editor {
 .desk {
   position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: text; outline: none; user-select: none;
   background:
-    radial-gradient(45% 40% at 50% 50%, rgba(var(--lamp-rgb),.08), transparent 70%),
+    radial-gradient(45% 40% at 50% 50%, rgba(var(--lamp-rgb), calc(.08 * var(--lv))), transparent 70%),
     var(--void);
 }
 .desk[data-view="page"] { background: radial-gradient(80% 60% at 50% 30%, #141824, var(--void)); }
@@ -369,14 +370,15 @@ body.page-editor {
 /* light falling off with distance: text far from the lamp sinks into the dark */
 .lamp-falloff {
   z-index: 5; left: -1600px; top: -1100px; width: 3200px; height: 2200px;
-  background: radial-gradient(circle at 50% 50%, rgba(7,8,12,0) 0, rgba(7,8,12,0) 200px, rgba(7,8,12,.14) 380px, rgba(7,8,12,.32) 640px, rgba(7,8,12,.5) 1000px);
+  background: radial-gradient(circle at 50% 50%, rgba(7,8,12,0) 0, rgba(7,8,12,0) 200px, rgba(7,8,12, calc(.14 * (2 - var(--lv)))) 380px, rgba(7,8,12, calc(.32 * (2 - var(--lv)))) 640px, rgba(7,8,12, calc(.5 * (2 - var(--lv)))) 1000px);
 }
 /* the beam: soft-edged wedge, bright at the bulb, inverse-square-ish falloff */
 .lamp-cone {
   z-index: 6; left: -300px; bottom: 0; width: 600px; height: 500px;
+  transform-origin: 50% 100%; transform: scale(calc(.85 + .15 * var(--lv)), calc(.7 + .3 * var(--lv)));
   background:
-    radial-gradient(ellipse 22% 30% at 50% 100%, rgba(var(--lamp-rgb),.7), transparent 70%),
-    radial-gradient(ellipse 46% 100% at 50% 100%, rgba(var(--lamp-rgb),.4), rgba(var(--lamp-rgb),.17) 32%, rgba(var(--lamp-rgb),.06) 62%, transparent 88%);
+    radial-gradient(ellipse 22% 30% at 50% 100%, rgba(var(--lamp-rgb), calc(.7 * var(--lv))), transparent 70%),
+    radial-gradient(ellipse 46% 100% at 50% 100%, rgba(var(--lamp-rgb), calc(.4 * var(--lv))), rgba(var(--lamp-rgb), calc(.17 * var(--lv))) 32%, rgba(var(--lamp-rgb), calc(.06 * var(--lv))) 62%, transparent 88%);
   -webkit-mask-image: conic-gradient(from -34deg at 50% 100%, transparent 0deg, #000 16deg, #000 52deg, transparent 68deg, transparent 360deg);
   mask-image: conic-gradient(from -34deg at 50% 100%, transparent 0deg, #000 16deg, #000 52deg, transparent 68deg, transparent 360deg);
   filter: blur(6px);
@@ -386,14 +388,15 @@ body.page-editor {
 /* colour of the light on the ink: brightens and tints letters, barely touches the dark */
 .lamp-tint {
   z-index: 6; left: -400px; bottom: -6px; width: 800px; height: 400px;
-  background: radial-gradient(ellipse 48% 92% at 50% 100%, rgba(var(--lamp-rgb),.95), rgba(var(--lamp-rgb),.65) 28%, rgba(var(--lamp-rgb),.26) 58%, transparent 85%);
+  transform-origin: 50% 100%; transform: scale(calc(.8 + .2 * var(--lv)), calc(.7 + .3 * var(--lv)));
+  background: radial-gradient(ellipse 48% 92% at 50% 100%, rgba(var(--lamp-rgb), calc(.95 * var(--lv))), rgba(var(--lamp-rgb), calc(.65 * var(--lv))) 28%, rgba(var(--lamp-rgb), calc(.26 * var(--lv))) 58%, transparent 85%);
   mix-blend-mode: overlay;
   animation: flicker 4.3s linear infinite;
 }
 /* bloom around the bulb */
 .lamp-bloom {
   z-index: 7; left: -110px; top: -55px; width: 220px; height: 110px;
-  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb),.68), rgba(var(--lamp-rgb),.2) 45%, transparent 72%);
+  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb), calc(.68 * var(--lv))), rgba(var(--lamp-rgb), calc(.2 * var(--lv))) 45%, transparent 72%);
   mix-blend-mode: screen;
   animation: flicker 4.3s linear infinite;
 }
@@ -401,8 +404,8 @@ body.page-editor {
 .lamp-spill {
   z-index: 7; left: -320px; top: -2px; width: 640px; height: 70px;
   background:
-    radial-gradient(ellipse 50% 2.4px at 50% 2px, rgba(var(--lamp-rgb),.95), rgba(var(--lamp-rgb),.35) 40%, transparent),
-    radial-gradient(ellipse 30% 70% at 50% 0%, rgba(var(--lamp-rgb),.10), transparent 75%);
+    radial-gradient(ellipse 50% 2.4px at 50% 2px, rgba(var(--lamp-rgb), calc(.95 * var(--lv))), rgba(var(--lamp-rgb), calc(.35 * var(--lv))) 40%, transparent),
+    radial-gradient(ellipse 30% 70% at 50% 0%, rgba(var(--lamp-rgb), calc(.10 * var(--lv))), transparent 75%);
   mix-blend-mode: screen;
 }
 .lamp-motes { z-index: 7; left: -220px; bottom: 6px; width: 440px; height: 380px; mix-blend-mode: screen; }
@@ -410,11 +413,11 @@ body.page-editor {
 .lamp-stem {
   z-index: 8; left: -1px; bottom: 5px; width: 2px; height: 12px; border-radius: 1px;
   background: linear-gradient(var(--lamp-hi-2), var(--lamp-hi));
-  box-shadow: 0 0 4px rgba(var(--lamp-rgb),.9), 0 0 10px rgba(var(--lamp-rgb),.5);
+  box-shadow: 0 0 4px rgba(var(--lamp-rgb), calc(.9 * var(--lv))), 0 0 10px rgba(var(--lamp-rgb), calc(.5 * var(--lv)));
 }
 .lamp-stem::before {
   content: ''; position: absolute; left: -4px; top: -1px; width: 10px; height: 2px; border-radius: 1px; background: var(--lamp-hi-2);
-  box-shadow: 0 0 6px rgba(var(--lamp-rgb),.9);
+  box-shadow: 0 0 6px rgba(var(--lamp-rgb), calc(.9 * var(--lv)));
 }
 /* frosted diffuser: white-hot core, colour toward the rim, small specular glint */
 .lamp-head {
@@ -424,7 +427,7 @@ body.page-editor {
     linear-gradient(180deg, var(--lamp-hi), var(--lamp) 50%, var(--lamp-2));
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.55), inset 0 -2px 3px rgba(0,0,0,.25),
-    0 0 6px rgba(var(--lamp-rgb),.95), 0 0 18px rgba(var(--lamp-rgb),.7), 0 0 46px rgba(var(--lamp-rgb),.4), 0 0 90px rgba(var(--lamp-rgb),.18);
+    0 0 6px rgba(var(--lamp-rgb), calc(.95 * var(--lv))), 0 0 18px rgba(var(--lamp-rgb), calc(.7 * var(--lv))), 0 0 46px rgba(var(--lamp-rgb), calc(.4 * var(--lv))), 0 0 90px rgba(var(--lamp-rgb), calc(.18 * var(--lv)));
 }
 .lamp-head i { position: absolute; left: 30%; top: 3px; width: 9px; height: 2px; border-radius: 2px; background: rgba(255,255,255,.75); filter: blur(.4px); }
 
@@ -435,7 +438,7 @@ body.page-editor {
 }
 .lamp-flash {
   z-index: 7; left: -90px; top: -45px; width: 180px; height: 90px; opacity: 0;
-  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb),.6), rgba(var(--lamp-rgb),.15) 45%, transparent 72%);
+  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb), calc(.6 * var(--lv))), rgba(var(--lamp-rgb), calc(.15 * var(--lv))) 45%, transparent 72%);
   mix-blend-mode: screen; will-change: opacity;
 }
 
@@ -537,6 +540,28 @@ body.page-editor .icon-btn:hover { background: rgba(140,160,220,.1); }
 .swatch.custom span { font: 700 16px/1 var(--mono-ui); color: #0a0a0a; mix-blend-mode: difference; filter: invert(1); pointer-events: none; }
 .swatch.custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
 .swatch:focus-visible, .swatch.custom:focus-within { outline: 1px solid var(--lt); outline-offset: 3px; }
+
+.lamp-level { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin-top: 16px; width: 100%; }
+.lamp-level > span, .lamp-level > b {
+  font-family: var(--mono-ui); font-size: 10px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--lt-dim);
+}
+.lamp-level > b { color: var(--lamp); min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
+.lamp-level input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; margin: 0; cursor: pointer;
+}
+.lamp-level input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px; background: linear-gradient(90deg, rgba(var(--lamp-rgb), .15), var(--lamp));
+}
+.lamp-level input[type="range"]::-moz-range-track { height: 2px; background: linear-gradient(90deg, rgba(var(--lamp-rgb), .15), var(--lamp)); }
+.lamp-level input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px; margin-top: -6px; border-radius: 50%; background: var(--lamp-hi-2);
+  box-shadow: 0 0 0 2px #10131b, 0 0 10px rgba(var(--lamp-rgb), .9);
+}
+.lamp-level input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--lamp-hi-2); box-shadow: 0 0 10px rgba(var(--lamp-rgb), .9);
+}
+.lamp-level input[type="range"]:focus-visible { outline: 1px solid var(--lt); outline-offset: 4px; }
+.lamp-pop .lamp-keys { margin-top: 10px; font-family: var(--mono-ui); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--lt-dim); }
 
 /* ==========================================================================
    Paper & ink

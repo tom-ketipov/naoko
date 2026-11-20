@@ -109,6 +109,7 @@ const SETTINGS_KEYS = {
   face: (v) => ['elite', 'prime'].includes(v),
   margin: (v) => ['lock', 'wrap'].includes(v),
   lamp: (v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v),
+  lampLevel: (v) => typeof v === 'number' && v >= 0.25 && v <= 1.75,
   cursor: (v) => typeof v === 'object' && v !== null && Number.isInteger(v.row) && Number.isInteger(v.col),
 };
 function sanitizeSettings(s) {

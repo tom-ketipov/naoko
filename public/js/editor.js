@@ -139,6 +139,7 @@ export function mountEditor(root, { doc, navigate }) {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const SPREAD = Math.tan((26 * Math.PI) / 180); // beam half-angle
     let rgb = [125, 155, 255];
+    let level = 1;
     let raf = 0;
     let last = 0;
     const spawn = (anywhere) => ({
@@ -171,7 +172,7 @@ export function mountEditor(root, { doc, navigate }) {
         const edge = Math.max(0, 1 - Math.abs(m.x - W / 2) / half);
         if (!edge) continue;
         const fall = 1 / (1 + (dy / 150) ** 2);
-        const a = edge * edge * (3 - 2 * edge) * fall * (0.55 + 0.45 * Math.sin(m.ph)) * 0.9;
+        const a = Math.min(1, edge * edge * (3 - 2 * edge) * fall * (0.55 + 0.45 * Math.sin(m.ph)) * 0.9 * level);
         if (a < 0.02) continue;
         ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`;
         ctx.beginPath();
@@ -180,6 +181,7 @@ export function mountEditor(root, { doc, navigate }) {
       }
     }
     return {
+      setLevel(v) { level = v; },
       setColor(r, g, b) {
         // dust catches the light a little whiter than the beam itself
         rgb = [r, g, b].map((c) => Math.round(c + (255 - c) * 0.45));
@@ -362,9 +364,48 @@ export function mountEditor(root, { doc, navigate }) {
       (settings.margin === 'wrap' ? ' · Auto-return' : ' · Margin lock');
     caret.classList.toggle('red', !!settings.ink);
     applyLamp(settings.lamp);
+    applyLampLevel(settings.lampLevel);
   }
 
   /** Light colour of the carriage lamp: drives every glow via CSS variables. */
+  const LEVEL_MIN = 0.25;
+  const LEVEL_MAX = 1.75;
+  const clampLevel = (v) => Math.round(Math.min(LEVEL_MAX, Math.max(LEVEL_MIN, Number(v) || 1)) * 100) / 100;
+
+  /** How much light the lamp throws (0.25–1.75). Drives every light layer via --lv. */
+  function applyLampLevel(v) {
+    const lv = clampLevel(v);
+    document.body.style.setProperty('--lv', String(lv));
+    motes.setLevel(lv);
+    document.querySelectorAll('.lamp-level').forEach((el) => {
+      const input = el.querySelector('input');
+      if (Number(input.value) !== lv) input.value = String(lv);
+      el.querySelector('b').textContent = `${Math.round(lv * 100)}%`;
+    });
+    return lv;
+  }
+
+  function lampLevelControl(cur) {
+    const lv = clampLevel(cur);
+    return `<label class="lamp-level"><span>Light</span>
+      <input type="range" min="${LEVEL_MIN}" max="${LEVEL_MAX}" step="0.05" value="${lv}" aria-label="Lamp brightness" />
+      <b>${Math.round(lv * 100)}%</b></label>`;
+  }
+
+  /** Slider: preview live while dragging, save when released. */
+  function bindLampLevel(scope) {
+    const input = scope.querySelector('.lamp-level input');
+    input.addEventListener('input', (e) => { e.stopPropagation(); applyLampLevel(input.value); });
+    input.addEventListener('change', (e) => { e.stopPropagation(); setLampLevel(input.value); });
+  }
+
+  function setLampLevel(v) {
+    const lv = clampLevel(v);
+    if (lv === settings.lampLevel) return applyLampLevel(lv);
+    applySettings({ lampLevel: lv });
+    return lv;
+  }
+
   function applyLamp(hex) {
     if (!HEX_RE.test(hex || '')) hex = '#7d9bff';
     const n = parseInt(hex.slice(1), 16);
@@ -435,13 +476,14 @@ export function mountEditor(root, { doc, navigate }) {
     lampPop.className = 'lamp-pop';
     lampPop.setAttribute('role', 'dialog');
     lampPop.setAttribute('aria-label', 'Lamp colour');
-    lampPop.innerHTML = `<div class="lamp-pop-head"><span>Lamp</span><span class="lamp-hex">${settings.lamp}</span></div>${lampSwatches(settings.lamp)}`;
+    lampPop.innerHTML = `<div class="lamp-pop-head"><span>Lamp</span><span class="lamp-hex">${settings.lamp}</span></div>${lampSwatches(settings.lamp)}${lampLevelControl(settings.lampLevel)}<div class="lamp-keys">⌥ ↑ / ⌥ ↓ while typing</div>`;
     document.body.appendChild(lampPop);
     const r = anchor.getBoundingClientRect();
     const w = lampPop.offsetWidth;
     lampPop.style.top = `${r.bottom + 8}px`;
     lampPop.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
     bindSwatches(lampPop);
+    bindLampLevel(lampPop);
     const hex = lampPop.querySelector('.lamp-hex');
     lampPop.querySelector('input[type="color"]').addEventListener('input', (e) => { hex.textContent = e.target.value; });
     lampPop.addEventListener('click', () => { hex.textContent = settings.lamp; });
@@ -797,6 +839,12 @@ export function mountEditor(root, { doc, navigate }) {
       save();
       return;
     }
+    if (e.altKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      const lv = setLampLevel((settings.lampLevel || 1) + (e.key === 'ArrowUp' ? 0.1 : -0.1));
+      toast(`Light ${Math.round(lv * 100)}%`, 900);
+      return;
+    }
     if (mod || e.altKey && e.key.length > 1) return;
     if (composing || e.isComposing) return;
     switch (e.key) {
@@ -987,8 +1035,9 @@ export function mountEditor(root, { doc, navigate }) {
           ${opt('margin', 'lock', 'Lock with bell', settings.margin)}
           ${opt('margin', 'wrap', 'Auto-return words', settings.margin)}
         </fieldset>
-        <fieldset class="lamp-field"><legend>Lamp colour</legend>
+        <fieldset class="lamp-field"><legend>Lamp</legend>
           ${lampSwatches(settings.lamp)}
+          ${lampLevelControl(settings.lampLevel)}
         </fieldset>
         <fieldset><legend>Sound</legend>
           <label class="switch"><input type="checkbox" name="sound" ${settings.sound ? 'checked' : ''}/><span>Key sounds</span></label>
@@ -996,6 +1045,7 @@ export function mountEditor(root, { doc, navigate }) {
         </fieldset>
       </form>`, { onClose: focusKeys });
     bindSwatches(m.el.querySelector('.lamp-field'));
+    bindLampLevel(m.el.querySelector('.lamp-field'));
     m.el.querySelector('form').addEventListener('change', (e) => {
       const t = e.target;
       if (t.type === 'color') return;
@@ -1138,6 +1188,7 @@ export function mountEditor(root, { doc, navigate }) {
       cancelAnimationFrame(motionRaf);
       document.body.style.removeProperty('--lamp');
       document.body.style.removeProperty('--lamp-rgb');
+      document.body.style.removeProperty('--lv');
       window.removeEventListener('resize', onResize);
       window.removeEventListener('beforeunload', flush);
       document.removeEventListener('visibilitychange', onVis);
