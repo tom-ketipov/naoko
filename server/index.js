@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const { createStore } = require('./db');
+const { renderPdf, extractPdfText } = require('./pdf');
 
 const PORT = process.env.PORT || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -320,6 +321,59 @@ app.get(
     res.json({
       doc: { title: d.title, content: d.content, settings: d.settings || {}, author: d.author, updatedAt: d.updated_at },
     });
+  })
+);
+
+/* ------------------------------------------------------------------ */
+/* PDF                                                                 */
+/* ------------------------------------------------------------------ */
+function pdfFilename(title) {
+  const base = String(title || 'Untitled').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '').trim().slice(0, 100) || 'Untitled';
+  const ascii = base.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
+  return `attachment; filename="${ascii}.pdf"; filename*=UTF-8''${encodeURIComponent(base)}.pdf`;
+}
+
+async function sendPdf(res, d, author) {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', pdfFilename(d.title));
+  res.setHeader('Cache-Control', 'private, no-store');
+  await renderPdf(res, { title: d.title, author, content: d.content, settings: d.settings });
+}
+
+app.get(
+  '/api/docs/:id/pdf',
+  requireUser,
+  asyncH(async (req, res) => {
+    const d = await store.getDoc(req.params.id, req.user.id);
+    if (!d) throw httpError(404, 'Document not found.');
+    await sendPdf(res, d, req.user.name);
+  })
+);
+
+app.get(
+  '/api/shared/:token/pdf',
+  asyncH(async (req, res) => {
+    const token = String(req.params.token);
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) throw httpError(404, 'Not found');
+    const d = await store.getDocByShareToken(token);
+    if (!d) throw httpError(404, 'This document is not shared or no longer exists.');
+    await sendPdf(res, d, d.author);
+  })
+);
+
+const pdfLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 40 });
+app.post(
+  '/api/pdf/extract',
+  requireUser,
+  pdfLimiter,
+  express.raw({ type: ['application/pdf', 'application/octet-stream'], limit: '20mb' }),
+  asyncH(async (req, res) => {
+    const buf = req.body;
+    if (!Buffer.isBuffer(buf) || buf.length < 5 || buf.subarray(0, 1024).indexOf('%PDF') === -1) {
+      throw httpError(415, 'Please choose a PDF file.');
+    }
+    const { title, pages } = await extractPdfText(buf);
+    res.json({ title, pages, pageCount: pages.length });
   })
 );
 

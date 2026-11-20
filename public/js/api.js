@@ -29,4 +29,20 @@ export const api = {
   deleteDoc: (id) => request('DELETE', `/api/docs/${id}`),
   share: (id, enabled) => request('POST', `/api/docs/${id}/share`, { enabled }),
   shared: (token) => request('GET', `/api/shared/${encodeURIComponent(token)}`),
+  async extractPdf(file) {
+    const res = await fetch('/api/pdf/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/pdf' },
+      body: file,
+      credentials: 'same-origin',
+    });
+    let data = null;
+    try { data = await res.json(); } catch { /* empty */ }
+    if (!res.ok) {
+      const err = new Error((data && data.error) || (res.status === 413 ? 'That PDF is too large (20 MB max).' : `Import failed (${res.status})`));
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  },
 };

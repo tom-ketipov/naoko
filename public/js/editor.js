@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { sound } from './sound.js';
 import { icons } from './icons.js';
-import { Paper, CW, LH, MARGIN_COLS, withDefaults, linesToText, countWords } from './paper.js';
+import { Paper, CW, LH, MARGIN_COLS, withDefaults, linesToText, countWords, wrapText } from './paper.js';
 import { toast, modal, escapeHtml, menu } from './ui.js';
 
 const MAX_ROWS = 4999;
@@ -587,7 +587,10 @@ export function mountEditor(root, { doc, navigate }) {
 
   /* auto-typing queue for pasted text */
   function enqueue(text) {
-    const chars = Array.from(text.replace(/\r\n?/g, '\n')).slice(0, 20000);
+    // Pre-wrap to the margins so long pasted lines don't jam against the margin lock.
+    const startCol = queue.length ? 0 : col;
+    const wrapped = wrapText(text, settings.cols, startCol).join('\n');
+    const chars = Array.from(wrapped).slice(0, 20000);
     queue.push(...chars);
     if (!queueTimer) pump();
   }
@@ -953,9 +956,49 @@ export function mountEditor(root, { doc, navigate }) {
 
   function openExport(anchor) {
     menu(anchor, [
+      { icon: icons.pdf, label: 'Download PDF', run: downloadPdf },
       { icon: icons.download, label: 'Download as .txt', run: downloadTxt },
-      { icon: icons.print, label: 'Print / save as PDF', run: () => window.print() },
+      { icon: icons.print, label: 'Print', run: () => window.print() },
+      { icon: icons.upload, label: 'Type in text from a PDF…', run: typeInPdf },
     ]);
+  }
+
+  async function downloadPdf() {
+    if (dirty || saving) {
+      toast('Saving before export…');
+      await save();
+      while (saving) await new Promise((r) => setTimeout(r, 100));
+    }
+    const a = document.createElement('a');
+    a.href = `/api/docs/${doc.id}/pdf`;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    focusKeys();
+  }
+
+  function typeInPdf() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf,.pdf';
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      toast(`Reading ${file.name}…`);
+      try {
+        const { pages } = await api.extractPdf(file);
+        const text = pages.map((t) => t.trim()).filter(Boolean).join('\n\n');
+        const n = Math.min(text.length, 20000);
+        toast(`Auto-typing ${n.toLocaleString()} characters from ${file.name}${text.length > 20000 ? ' (first 20,000)' : ''}`, 3600);
+        focusKeys();
+        enqueue(text);
+      } catch (e) {
+        toast(e.message, 4000);
+        focusKeys();
+      }
+    });
+    input.click();
   }
 
   function downloadTxt() {

@@ -191,7 +191,7 @@ body.page-auth { background: var(--black); }
 
 .block { padding: 28px var(--pad) 40px; border-bottom: 1px solid var(--line); }
 .block-head { display: flex; justify-content: space-between; color: var(--muted); padding: 0 8px; margin-bottom: 22px; }
-.new-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-left: 1px solid var(--line); }
+.new-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; border-left: 1px solid var(--line); }
 .new-card {
   display: grid; gap: 14px; text-align: left; border: 0; border-right: 1px solid var(--line); background: none; padding: 8px 8px 0; color: inherit;
 }
@@ -214,6 +214,18 @@ body.page-auth { background: var(--black); }
 .mini-sheet.ms i:first-child { width: 40%; margin: 0 auto 16px; }
 .mini-sheet.ms i { margin-bottom: 7px; }
 .mini-sheet.poem { align-items: center; padding-top: 48px; }
+.import-card { cursor: pointer; }
+.mini-sheet.pdf { border-style: dashed; align-items: center; justify-content: center; gap: 10px; }
+.pdf-mark { font-family: var(--display); font-weight: 900; font-stretch: 70%; font-size: 52px; line-height: 1; transition: color .2s; }
+.pdf-hint { color: var(--muted); font-size: 10px; transition: color .2s; }
+.new-card:hover .pdf-mark, .new-card:hover .pdf-hint { color: var(--bone); }
+.import-card:focus-within .mini-sheet { outline: 1px solid var(--black); outline-offset: 3px; }
+.import-card.busy .mini-sheet { animation: pulse 1s ease-in-out infinite; }
+.docs.dropping::after {
+  content: 'Drop PDF to import'; position: fixed; inset: 12px; z-index: 50; display: grid; place-items: center;
+  border: 1px dashed var(--black); background: rgba(244,243,239,.92);
+  font-family: var(--display); font-weight: 900; font-stretch: 70%; font-size: clamp(40px, 8vw, 110px); text-transform: uppercase;
+}
 .mini-sheet.poem i { width: 50%; } .mini-sheet.poem i:nth-child(2) { width: 62%; } .mini-sheet.poem i:nth-child(4) { width: 34%; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
@@ -617,7 +629,7 @@ body.page-shared { background: var(--black); }
   .auth-hero, .auth-panel { grid-column: 1 / -1; }
   .auth-hero .display { font-size: clamp(52px, 16vw, 120px); }
   .anno-tr { display: none; }
-  .new-row { grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--line); }
+  .new-row { grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
   .new-card { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
   .save-state, .brand-sm, .hint-k { display: none; }
   .ed-title { width: auto; flex: 1; max-width: none; }
@@ -639,6 +651,7 @@ body.page-shared { background: var(--black); }
   .ed-status { gap: 12px; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
   .ed-status .aux { display: none; }
   .grid { grid-template-columns: repeat(2, 1fr); }
+  .new-row { grid-template-columns: repeat(2, 1fr); }
   .doc-thumb { height: 150px; padding: 14px; }
   .doc-thumb p { font-size: 10px; }
   .mini-sheet { height: 140px; padding: 22px 16px; }

@@ -1,4 +1,5 @@
 // Paper model + rendering of typed sheets with per-strike ink variation.
+import { glyphStyle } from './ink.js';
 
 export const CW = 12; // px per character cell (pica: 10 chars / inch, scaled)
 export const LH = 20; // px per line (6 lines / inch at the same scale)
@@ -24,54 +25,7 @@ export function withDefaults(s) {
   return { ...DEFAULTS, ...(s || {}) };
 }
 
-/* ---------- deterministic randomness so ink looks the same every render ---------- */
-function mix(...nums) {
-  let h = 2166136261;
-  for (const n of nums) {
-    h ^= n;
-    h = Math.imul(h, 16777619);
-    h ^= h >>> 13;
-  }
-  return h >>> 0;
-}
-function rng(seed) {
-  let a = seed || 1;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const slugCache = new Map();
-/** Each letter's typebar is slightly misaligned — consistently, like a real machine. */
-function slug(ch) {
-  let s = slugCache.get(ch);
-  if (!s) {
-    const r = rng(mix(ch.codePointAt(0), 7919));
-    s = { dx: (r() - 0.5) * 0.9, dy: (r() - 0.5) * 1.8, rot: (r() - 0.5) * 1.6, weight: 0.88 + r() * 0.14 };
-    slugCache.set(ch, s);
-  }
-  return s;
-}
-
-export function glyphStyle(row, col, i, ch) {
-  const r = rng(mix(row, col, i, ch.codePointAt(0)));
-  const s = slug(ch);
-  const dx = s.dx + (r() - 0.5) * 0.7;
-  const dy = s.dy + (r() - 0.5) * 0.7;
-  const rot = s.rot + (r() - 0.5) * 1.2;
-  let op = s.weight * (0.8 + r() * 0.2);
-  if (r() < 0.04) op *= 0.62; // a light strike
-  let mask = '';
-  if (r() < 0.3) {
-    // uneven pressure: one side of the letter inks lighter
-    const ang = Math.floor(r() * 360);
-    const lo = (0.35 + r() * 0.35).toFixed(2);
-    mask = `linear-gradient(${ang}deg, #000 ${30 + Math.floor(r() * 30)}%, rgba(0,0,0,${lo}))`;
-  }
-  return { dx, dy, rot, op, mask };
-}
+export { glyphStyle };
 
 /* ---------- text helpers ---------- */
 export function linesToText(lines) {
@@ -79,6 +33,56 @@ export function linesToText(lines) {
     .map((line) => (line || []).map((c) => (c && c.length ? c[c.length - 1][0] : ' ')).join('').replace(/\s+$/, ''))
     .join('\n')
     .replace(/\s+$/, '');
+}
+
+/**
+ * Word-wrap plain text to a line width, like a typist would: break at the last
+ * space, hard-break words longer than a line, expand tabs to 5-column stops.
+ * `startCol` is where the carriage already sits on the first line.
+ */
+export function wrapText(text, cols, startCol = 0) {
+  const out = [];
+  String(text).replace(/\r\n?/g, '\n').split('\n').forEach((raw, idx) => {
+    let line = '';
+    for (const ch of raw) {
+      if (ch === '\t') line += ' '.repeat(5 - (line.length % 5));
+      else line += ch;
+    }
+    line = line.replace(/\s+$/, '');
+    let width = idx === 0 ? Math.max(1, cols - startCol) : cols;
+    if (!line) { out.push(''); return; }
+    while (Array.from(line).length > width) {
+      const chars = Array.from(line);
+      let cut = chars.lastIndexOf(' ', width);
+      if (cut <= 0) cut = width;
+      out.push(chars.slice(0, cut).join('').replace(/\s+$/, ''));
+      line = chars.slice(cut).join('').replace(/^ +/, '');
+      width = cols;
+    }
+    out.push(line);
+  });
+  return out;
+}
+
+/**
+ * Lay PDF pages onto typewriter sheets: each source page starts on a fresh
+ * sheet when it fits; longer pages simply run on.
+ */
+export function pagesToLines(pages, cols, lpp, maxRows = 4999) {
+  const lines = [];
+  let truncated = false;
+  pages.forEach((pageText, pi) => {
+    const wrapped = wrapText(pageText.replace(/\n{3,}/g, '\n\n').trim(), cols);
+    if (pi > 0 && lines.length % lpp !== 0) {
+      while (lines.length % lpp !== 0) lines.push([]);
+    }
+    for (const l of wrapped) {
+      if (lines.length >= maxRows) { truncated = true; return; }
+      lines.push(Array.from(l).map((ch) => (ch === ' ' ? null : [[ch, 0]])));
+    }
+  });
+  while (lines.length && !lines[lines.length - 1].length) lines.pop();
+  return { lines: lines.length ? lines : [[]], truncated };
 }
 
 export function countWords(lines) {

@@ -15,7 +15,8 @@ A document editor that behaves like a typewriter. You type onto paper held in a 
 - **Synthesised sound** (Web Audio, no audio files): key strikes, a duller space bar, the carriage-return ratchet and slam, the margin bell and the paper feed.
 - **Paste to auto-type**: pasted text gets typed out key by key.
 - **Accounts and cloud saving**: autosave, a document list with templates (blank, letter, manuscript, poem), rename/delete, and read-only share links.
-- **Export** as `.txt`, or print/save as PDF with one sheet per US Letter page.
+- **PDF export**: download a real PDF with one sheet per US Letter page. The typed letters keep their ink jitter and overstrikes, and an invisible text layer keeps the PDF searchable and copyable. Shared links can download the PDF too. You can also export as `.txt` or print.
+- **PDF import**: drop a PDF on the documents page (or use the Import PDF card) to lay its text onto fresh sheets, or auto-type a PDF's text into the open document from the export menu. Scanned PDFs without selectable text can't be imported.
 
 ## Stack
 

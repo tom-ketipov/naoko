@@ -1,7 +1,7 @@
 import { api } from './api.js';
 import { icons } from './icons.js';
 import { mountEditor } from './editor.js';
-import { Paper, withDefaults } from './paper.js';
+import { Paper, withDefaults, pagesToLines, DEFAULTS } from './paper.js';
 import { toast, escapeHtml, timeAgo, menu, confirmDialog, modal } from './ui.js';
 import { sound } from './sound.js';
 
@@ -162,12 +162,13 @@ async function showDocs() {
       <h1 class="display"><span>Your</span><span>papers.</span></h1>
     </section>
     <section class="block">
-      <div class="block-head mono"><span>Feed a new sheet</span><span>04 templates</span></div>
+      <div class="block-head mono"><span>Feed a new sheet</span><span>04 templates · or drop a PDF</span></div>
       <div class="new-row">
         <button class="new-card" data-new="blank"><div class="mini-sheet"><span class="plus">+</span></div><span class="cap mono"><b>01 — Blank</b><span>→</span></span></button>
         <button class="new-card" data-new="letter"><div class="mini-sheet letter"><i></i><i></i><i></i><i></i><i></i></div><span class="cap mono"><b>02 — Letter</b><span>→</span></span></button>
         <button class="new-card" data-new="manuscript"><div class="mini-sheet ms"><i></i><i></i><i></i><i></i><i></i></div><span class="cap mono"><b>03 — Manuscript</b><span>→</span></span></button>
         <button class="new-card" data-new="poem"><div class="mini-sheet poem"><i></i><i></i><i></i><i></i></div><span class="cap mono"><b>04 — Poem</b><span>→</span></span></button>
+        <label class="new-card import-card"><input type="file" accept="application/pdf,.pdf" hidden /><div class="mini-sheet pdf"><span class="pdf-mark">PDF</span><span class="pdf-hint mono">Import text</span></div><span class="cap mono"><b>05 — Import PDF</b><span>↑</span></span></label>
       </div>
     </section>
     <section class="block">
@@ -183,6 +184,34 @@ async function showDocs() {
     navigate('#/login');
   };
   app.querySelectorAll('[data-new]').forEach((b) => (b.onclick = () => createFromTemplate(b.dataset.new)));
+  const pdfInput = app.querySelector('.import-card input');
+  pdfInput.addEventListener('change', () => {
+    const f = pdfInput.files && pdfInput.files[0];
+    pdfInput.value = '';
+    if (f) importPdf(f);
+  });
+  const docsEl = app.querySelector('.docs');
+  let dragDepth = 0;
+  docsEl.addEventListener('dragenter', (e) => {
+    if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
+    e.preventDefault();
+    dragDepth++;
+    docsEl.classList.add('dropping');
+  });
+  docsEl.addEventListener('dragover', (e) => {
+    if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault();
+  });
+  docsEl.addEventListener('dragleave', () => {
+    if (--dragDepth <= 0) { dragDepth = 0; docsEl.classList.remove('dropping'); }
+  });
+  docsEl.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    docsEl.classList.remove('dropping');
+    const f = [...(e.dataTransfer?.files || [])].find((x) => x.type === 'application/pdf' || /\.pdf$/i.test(x.name));
+    if (f) importPdf(f);
+    else toast('Drop a PDF file to import it.');
+  });
 
   const grid = app.querySelector('.grid');
   try {
@@ -260,6 +289,37 @@ async function deleteDoc(card) {
   } catch (ex) { toast(ex.message); }
 }
 
+/* Import: pull the text out of a PDF and lay it onto fresh sheets. */
+let importing = false;
+async function importPdf(file) {
+  if (importing) return;
+  if (file.size > 20 * 1024 * 1024) return toast('That PDF is too large (20 MB max).');
+  importing = true;
+  const card = app.querySelector('.import-card');
+  card && card.classList.add('busy');
+  toast(`Reading ${file.name}…`, 10000);
+  try {
+    const { title, pages } = await api.extractPdf(file);
+    const { lines, truncated } = pagesToLines(pages, DEFAULTS.cols, DEFAULTS.linesPerPage);
+    const name = (title || file.name.replace(/\.pdf$/i, '')).trim() || 'Imported PDF';
+    const { doc } = await api.createDoc({
+      title: name,
+      content: { v: 1, lines },
+      settings: { cursor: { row: lines.length, col: 0 } },
+    });
+    toast(truncated ? 'Imported — the PDF was long, so only the first sheets were typed.' : `Imported ${pages.length} page${pages.length === 1 ? '' : 's'} from ${file.name}`, 3600);
+    sound.unlock();
+    sound.feed();
+    navigate(`#/d/${doc.id}`);
+  } catch (e) {
+    if (e.status === 401) { user = null; return navigate('#/login'); }
+    toast(e.message, 4200);
+  } finally {
+    importing = false;
+    card && card.classList.remove('busy');
+  }
+}
+
 /* Templates are pre-typed with the typewriter's own cell model. */
 function typed(text, ink = 0) {
   return text.split('\n').map((l) => Array.from(l).map((ch) => (ch === ' ' ? null : [[ch, ink]])));
@@ -324,6 +384,7 @@ async function showShared(token) {
           <a class="wordmark" href="#/">Naoko</a>
           <div class="shared-title"><b>${escapeHtml(doc.title)}</b><span>Typed by ${escapeHtml(doc.author)} · ${timeAgo(doc.updatedAt)}</span></div>
           <nav class="nav-links">
+            <a href="/api/shared/${encodeURIComponent(token)}/pdf" download>PDF</a>
             <button data-print>Print</button>
             <a href="#/${user ? 'docs' : 'register'}" aria-current="true">${user ? 'My documents' : 'Try Naoko'} →</a>
           </nav>
