@@ -19,6 +19,14 @@ services:
         fromDatabase:
           name: naoko-db
           property: connectionString
+      # Google Docs mirror (optional). Fill these in the Render dashboard; see README.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # Encrypts stored Google tokens. Render generates a random value once.
+      - key: TOKEN_ENC_KEY
+        generateValue: true
 
 databases:
   - name: naoko-db

@@ -7,6 +7,8 @@ const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const { createStore } = require('./db');
 const { renderPdf, extractPdfText } = require('./pdf');
+const google = require('./google');
+const { createMirror } = require('./gdocs-mirror');
 
 const PORT = process.env.PORT || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -16,6 +18,7 @@ const MAX_LINES = 5000;
 const MAX_COLS = 120;
 
 const store = createStore();
+const mirror = createMirror({ store, google });
 const app = express();
 
 app.set('trust proxy', 1);
@@ -126,6 +129,17 @@ function cleanTitle(t) {
   return title || 'Untitled';
 }
 
+function googleStatus(d) {
+  return {
+    enabled: !!d.gdoc_sync,
+    docId: d.gdoc_id || null,
+    url: d.gdoc_id ? `https://docs.google.com/document/d/${d.gdoc_id}/edit` : null,
+    syncedAt: d.gdoc_synced_at || null,
+    error: d.gdoc_error || null,
+    pending: mirror.pending(d.id),
+  };
+}
+
 function docOut(d) {
   return {
     id: d.id,
@@ -134,6 +148,7 @@ function docOut(d) {
     settings: d.settings || {},
     wordCount: d.word_count,
     shareToken: d.share_token || null,
+    google: googleStatus(d),
     createdAt: d.created_at,
     updatedAt: d.updated_at,
   };
@@ -236,7 +251,7 @@ app.get(
     res.json({
       docs: docs.map((d) => ({
         id: d.id, title: d.title, preview: d.preview, wordCount: d.word_count,
-        shared: d.shared, createdAt: d.created_at, updatedAt: d.updated_at,
+        shared: d.shared, googleSync: !!d.gdoc_sync, createdAt: d.created_at, updatedAt: d.updated_at,
       })),
     });
   })
@@ -284,6 +299,7 @@ app.put(
       Object.assign(fields, derived(fields.content));
     }
     const d = await store.updateDoc(req.params.id, req.user.id, fields);
+    if (d && d.gdoc_sync && (fields.content || fields.title)) mirror.schedule(d.id, req.user.id);
     if (!d) throw httpError(404, 'Document not found.');
     res.json({ doc: { id: d.id, title: d.title, wordCount: d.word_count, updatedAt: d.updated_at } });
   })
@@ -322,6 +338,94 @@ app.get(
     res.json({
       doc: { title: d.title, content: d.content, settings: d.settings || {}, author: d.author, updatedAt: d.updated_at },
     });
+  })
+);
+
+/* ------------------------------------------------------------------ */
+/* Google Docs mirror                                                  */
+/* ------------------------------------------------------------------ */
+const googleLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60 });
+
+app.get(
+  '/api/google/status',
+  requireUser,
+  asyncH(async (req, res) => {
+    const acct = google.configured() ? await store.getGoogleAccount(req.user.id) : null;
+    res.json({ configured: google.configured(), connected: !!acct, email: (acct && acct.email) || null });
+  })
+);
+
+// Browser navigation (not fetch): sends the writer to Google's consent screen.
+app.get('/api/google/connect', googleLimiter, (req, res) => {
+  const docId = UUID_RE.test(String(req.query.doc || '')) ? String(req.query.doc) : null;
+  const back = docId ? `/#/d/${docId}` : '/#/docs';
+  if (!req.user) return res.redirect('/#/login');
+  if (!google.configured()) return res.redirect(`${back}?google=unconfigured`);
+  res.redirect(google.authUrl(req, req.user.id, { docId }));
+});
+
+app.get(
+  '/api/google/callback',
+  googleLimiter,
+  asyncH(async (req, res) => {
+    const st = google.takeState(String(req.query.state || ''));
+    const docId = st && st.returnTo && st.returnTo.docId;
+    const back = docId ? `/#/d/${docId}` : '/#/docs';
+    if (!st || !req.user || req.user.id !== st.userId) return res.redirect(`${back}?google=expired`);
+    if (req.query.error) return res.redirect(`${back}?google=denied`);
+    try {
+      await google.connect(store, req, req.user.id, String(req.query.code || ''));
+    } catch (e) {
+      console.error('[google] connect failed:', e.message);
+      return res.redirect(`${back}?google=${e.code === 'scope_denied' ? 'scope' : 'failed'}`);
+    }
+    if (docId) {
+      try { await mirror.enable(docId, req.user.id); } catch (e) { console.error('[google] enable failed:', e.message); }
+    }
+    res.redirect(`${back}?google=connected`);
+  })
+);
+
+app.post(
+  '/api/google/disconnect',
+  requireUser,
+  asyncH(async (req, res) => {
+    await google.disconnect(store, req.user.id);
+    res.json({ ok: true });
+  })
+);
+
+app.get(
+  '/api/docs/:id/google',
+  requireUser,
+  asyncH(async (req, res) => {
+    const d = await store.getDoc(req.params.id, req.user.id);
+    if (!d) throw httpError(404, 'Document not found.');
+    res.json({ google: googleStatus(d) });
+  })
+);
+
+app.post(
+  '/api/docs/:id/google',
+  requireUser,
+  googleLimiter,
+  asyncH(async (req, res) => {
+    if (!google.configured()) throw httpError(503, 'Google Docs sync is not set up on this server.');
+    let d = await store.getDoc(req.params.id, req.user.id);
+    if (!d) throw httpError(404, 'Document not found.');
+    if (req.body.enabled === false) {
+      d = await mirror.disable(d.id, req.user.id);
+    } else {
+      if (!(await store.getGoogleAccount(req.user.id))) throw httpError(409, 'Connect Google Drive first.');
+      try {
+        d = await mirror.enable(d.id, req.user.id);
+      } catch (e) {
+        if (e instanceof google.GoogleAuthError) throw httpError(409, e.message);
+        if (e instanceof google.GoogleApiError) throw httpError(502, `Google refused: ${e.message}`);
+        throw e;
+      }
+    }
+    res.json({ google: googleStatus(d) });
   })
 );
 
