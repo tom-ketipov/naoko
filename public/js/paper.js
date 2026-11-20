@@ -177,15 +177,10 @@ export class Paper {
     if (added) this.el.style.height = `${this.totalHeight()}px`;
   }
 
-  renderLine(row, cells) {
+  lineEl(row) {
     const p = Math.floor(row / this.lpp);
     this.ensurePages(Math.max(this.sheets.length, p + 1));
     let el = this.lineEls.get(row);
-    const empty = !cells || !cells.some((c) => c && c.length);
-    if (empty) {
-      if (el) { el.remove(); this.lineEls.delete(row); }
-      return;
-    }
     if (!el) {
       el = document.createElement('div');
       el.className = 'tl';
@@ -193,6 +188,29 @@ export class Paper {
       this.sheets[p].appendChild(el);
       this.lineEls.set(row, el);
     }
+    return el;
+  }
+
+  static glyphHtml(row, col, i, ch, ink) {
+    const g = glyphStyle(row, col, i, ch);
+    const esc = ch === '<' ? '&lt;' : ch === '&' ? '&amp;' : ch === '>' ? '&gt;' : ch;
+    const m = g.mask ? `-webkit-mask-image:${g.mask};mask-image:${g.mask};` : '';
+    const t = `translate(${g.dx.toFixed(2)}px,${g.dy.toFixed(2)}px) rotate(${g.rot.toFixed(2)}deg)`;
+    return {
+      html: `<span class="g${ink ? ' red' : ''}" style="left:${col * CW}px;transform:${t};opacity:${g.op.toFixed(2)};${m}">${esc}</span>`,
+      t,
+      op: g.op,
+    };
+  }
+
+  renderLine(row, cells) {
+    const empty = !cells || !cells.some((c) => c && c.length);
+    if (empty) {
+      const el = this.lineEls.get(row);
+      if (el) { el.remove(); this.lineEls.delete(row); }
+      return;
+    }
+    const el = this.lineEl(row);
     let html = '';
     for (let col = 0; col < cells.length; col++) {
       const cell = cells[col];
@@ -200,13 +218,31 @@ export class Paper {
       for (let i = 0; i < cell.length; i++) {
         const [ch, ink] = cell[i];
         if (ch === ' ') continue;
-        const g = glyphStyle(row, col, i, ch);
-        const esc = ch === '<' ? '&lt;' : ch === '&' ? '&amp;' : ch === '>' ? '&gt;' : ch;
-        const m = g.mask ? `-webkit-mask-image:${g.mask};mask-image:${g.mask};` : '';
-        html += `<span class="g${ink ? ' red' : ''}" style="left:${col * CW}px;transform:translate(${g.dx.toFixed(2)}px,${g.dy.toFixed(2)}px) rotate(${g.rot.toFixed(2)}deg);opacity:${g.op.toFixed(2)};${m}">${esc}</span>`;
+        html += Paper.glyphHtml(row, col, i, ch, ink).html;
       }
     }
     el.innerHTML = html;
+  }
+
+  /**
+   * Add a single new strike without re-rendering the line. With `animate`,
+   * the letter lands like a typebar hit: a dark, slightly swollen impression
+   * that settles into its final ink within a tenth of a second.
+   */
+  strikeGlyph(row, col, i, ch, ink, animate = false) {
+    if (ch === ' ') return;
+    const el = this.lineEl(row);
+    const g = Paper.glyphHtml(row, col, i, ch, ink);
+    el.insertAdjacentHTML('beforeend', g.html);
+    if (!animate) return;
+    const span = el.lastElementChild;
+    span.animate(
+      [
+        { opacity: Math.min(1, g.op + 0.25), transform: `${g.t} translateY(-0.6px) scale(1.16)` },
+        { opacity: g.op, transform: g.t },
+      ],
+      { duration: 130, easing: 'cubic-bezier(.15,.85,.3,1)' }
+    );
   }
 
   renderAll(lines, minRows = 1) {

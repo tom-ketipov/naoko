@@ -326,13 +326,9 @@ body.page-editor {
 }
 .desk[data-view="page"] { background: radial-gradient(80% 60% at 50% 30%, #141824, var(--void)); }
 .stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-.desk.shake .stage { animation: shake .18s; }
-@keyframes shake { 25% { translate: -2px 0; } 75% { translate: 2px 0; } }
 
-.carriage { position: absolute; left: 0; top: 0; height: 100%; will-change: transform; }
+.carriage { position: absolute; left: 0; top: 0; height: 100%; will-change: transform; backface-visibility: hidden; }
 .roll { position: absolute; left: 0; top: 0; will-change: transform; }
-.roll.jolt .sheets { animation: jolt 90ms ease-out; }
-@keyframes jolt { 35% { translate: 0 .6px; } }
 
 /* the rail the lamp rides on: dim steel, catching light only near the lamp */
 .rail {
@@ -420,10 +416,11 @@ body.page-editor {
   0%, 100% { opacity: 1; } 6% { opacity: .96; } 9% { opacity: .99; } 23% { opacity: .97; }
   41% { opacity: 1; } 57% { opacity: .95; } 60% { opacity: .99; } 78% { opacity: .97; } 91% { opacity: 1; }
 }
-.lamp.hit .lamp-head { animation: press 110ms ease-out; }
-.lamp.hit .lamp-bloom { animation: surge 160ms ease-out; }
-@keyframes press { 40% { transform: translateY(1.5px); } }
-@keyframes surge { 0% { filter: brightness(1.35); } }
+.lamp-flash {
+  z-index: 7; left: -90px; top: -45px; width: 180px; height: 90px; opacity: 0;
+  background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb),.6), rgba(var(--lamp-rgb),.15) 45%, transparent 72%);
+  mix-blend-mode: screen; will-change: opacity;
+}
 
 /* fine film grain stops the dark gradients from banding */
 .desk::after {
@@ -661,7 +658,7 @@ body.page-shared { background: var(--black); }
 }
 @media (prefers-reduced-motion: reduce) {
   .carriage, .roll { transition: none !important; }
-  .lamp-cone, .lamp-tint, .lamp-bloom, .lamp.hit .lamp-head, .roll.jolt .sheets, .desk.shake .stage { animation: none; }
+  .lamp-cone, .lamp-tint, .lamp-bloom { animation: none; }
   .lamp-motes { display: none; }
 }
 

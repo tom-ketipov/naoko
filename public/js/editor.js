@@ -24,13 +24,19 @@ export const LAMP_PRESETS = [
 ];
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 
-const EASE = {
-  step: 'transform 55ms cubic-bezier(.2,.8,.3,1)',
-  ret: 'transform 420ms cubic-bezier(.35,.0,.15,1)',
-  roll: 'transform 140ms cubic-bezier(.2,.8,.3,1)',
-  jump: 'transform 260ms cubic-bezier(.2,.8,.3,1)',
-  none: 'none',
+/*
+ * Carriage physics. Each kind of move gets a spring [stiffness, damping ratio]
+ * per axis. Springs keep their velocity when a new target arrives, so fast
+ * typing glides instead of restarting a transition on every key.
+ */
+const SPRINGS = {
+  step: { x: [1600, 1], y: [650, 1] },     // escapement: quick, no overshoot
+  roll: { x: [1600, 1], y: [520, 1] },     // platen knob
+  jump: { x: [320, 1], y: [320, 1] },      // click-to-place, tab
+  ret: { x: [210, 0.8], y: [420, 1] },     // carriage return: swing back, small bounce off the stop
+  scroll: { x: [400, 1], y: [260, 1] },    // page view wheel
 };
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function mountEditor(root, { doc, navigate }) {
   let settings = withDefaults(doc.settings);
@@ -86,6 +92,7 @@ export function mountEditor(root, { doc, navigate }) {
           <canvas class="lamp-motes" width="440" height="380"></canvas>
           <div class="lamp-spill"></div>
           <div class="lamp-bloom"></div>
+          <div class="lamp-flash"></div>
           <div class="lamp-stem"></div>
           <div class="lamp-head"><i></i></div>
         </div>
@@ -234,23 +241,91 @@ export function mountEditor(root, { doc, navigate }) {
     return Math.max(0, paper.totalHeight() - geo.h + PAGE_TOP + 60);
   }
 
+  /* ---------------- motion: one rAF loop drives carriage + paper ---------------- */
+  const mx = { p: 0, v: 0, k: 1600, z: 1 };
+  const my = { p: 0, v: 0, k: 650, z: 1 };
+  let motionRaf = 0;
+  let motionLast = 0;
+  let readoutDirty = false;
+  let lastTx = NaN;
+  let lastTy = NaN;
+
+  function targets() {
+    if (view === 'carriage') {
+      const pos = paper.cellPos(row, col);
+      return [geo.sx - (pos.x + CW / 2), geo.sy - LH - pos.y];
+    }
+    return [Math.round((geo.w - paper.sheetW) / 2), PAGE_TOP - scrollY];
+  }
+
+  function stepSpring(sp, target, dt) {
+    const w = Math.sqrt(sp.k);
+    const c = 2 * sp.z * w;
+    // semi-implicit Euler in small substeps: stable at any frame rate
+    let t = dt;
+    while (t > 0) {
+      const h = Math.min(t, 1 / 480);
+      sp.v += (-sp.k * (sp.p - target) - c * sp.v) * h;
+      sp.p += sp.v * h;
+      t -= h;
+    }
+    if (Math.abs(sp.p - target) < 0.02 && Math.abs(sp.v) < 0.6) {
+      sp.p = target;
+      sp.v = 0;
+      return true;
+    }
+    return false;
+  }
+
+  function writeTransforms() {
+    // write only when something moved; avoids needless style invalidation
+    if (mx.p !== lastTx) { carriage.style.transform = `translate3d(${mx.p.toFixed(2)}px,0,0)`; lastTx = mx.p; }
+    if (my.p !== lastTy) { roll.style.transform = `translate3d(0,${my.p.toFixed(2)}px,0)`; lastTy = my.p; }
+  }
+
+  function motionFrame(t) {
+    const dt = Math.min(0.05, motionLast ? (t - motionLast) / 1000 : 1 / 60);
+    motionLast = t;
+    const [tx, ty] = targets();
+    const doneX = stepSpring(mx, tx, dt);
+    const doneY = stepSpring(my, ty, dt);
+    writeTransforms();
+    if (readoutDirty) flushReadouts();
+    if (doneX && doneY) { motionRaf = 0; motionLast = 0; return; }
+    motionRaf = requestAnimationFrame(motionFrame);
+  }
+
+  function kick() {
+    if (!motionRaf) motionRaf = requestAnimationFrame(motionFrame);
+  }
+
   function place(kind = 'step') {
     const pos = paper.cellPos(row, col);
-    let x;
-    let y;
-    if (view === 'carriage') {
-      x = geo.sx - (pos.x + CW / 2);
-      y = geo.sy - LH - pos.y;
-    } else {
-      x = Math.round((geo.w - paper.sheetW) / 2);
-      y = PAGE_TOP - scrollY;
-    }
-    carriage.style.transition = EASE[kind] || EASE.step;
-    roll.style.transition = view === 'carriage' ? EASE[kind === 'step' ? 'roll' : kind] || EASE.roll : EASE[kind === 'step' ? 'none' : kind];
-    carriage.style.transform = `translate3d(${x}px,0,0)`;
-    roll.style.transform = `translate3d(0,${y}px,0)`;
     caret.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
-    updateReadouts(pos.page);
+    readoutDirty = true;
+    if (kind === 'none' || REDUCED_MOTION) {
+      const [tx, ty] = targets();
+      mx.p = tx; my.p = ty; mx.v = 0; my.v = 0;
+      writeTransforms();
+      flushReadouts();
+      return;
+    }
+    const sp = SPRINGS[kind] || SPRINGS.step;
+    [mx.k, mx.z] = sp.x;
+    [my.k, my.z] = sp.y;
+    kick();
+  }
+
+  /** The paper jolts a hair as the typebar hits the platen. */
+  function jolt() {
+    if (view !== 'carriage' || REDUCED_MOTION) return;
+    my.v += 55;
+    kick();
+  }
+
+  function flushReadouts() {
+    readoutDirty = false;
+    updateReadouts(paper.cellPos(row, col).page);
   }
 
   /** In page view, keep the caret in sight. */
@@ -262,9 +337,11 @@ export function mountEditor(root, { doc, navigate }) {
     else if (top > geo.h - 80) scrollY = Math.min(maxScroll(), y - geo.h + 140);
   }
 
+  const posEl = root.querySelector('[data-k="pos"]');
   function updateReadouts(page) {
     const pages = Math.max(paper.sheets.length, page + 1);
-    root.querySelector('[data-k="pos"]').textContent = `Ln ${(row % settings.linesPerPage) + 1}, Col ${col + 1} · Page ${page + 1} of ${pages}`;
+    const txt = `Ln ${(row % settings.linesPerPage) + 1}, Col ${col + 1} · Page ${page + 1} of ${pages}`;
+    if (posEl.textContent !== txt) posEl.textContent = txt;
   }
 
   function updateStats() {
@@ -405,16 +482,21 @@ export function mountEditor(root, { doc, navigate }) {
     return paper.sheets.length > before;
   }
 
+  const lampHead = root.querySelector('.lamp-head');
+  const lampFlash = root.querySelector('.lamp-flash');
+  const HEAD_PRESS = [
+    { transform: 'translateY(0)' },
+    { transform: 'translateY(1.5px)', offset: 0.35 },
+    { transform: 'translateY(0)' },
+  ];
+  const FLASH = [{ opacity: 0.85 }, { opacity: 0 }];
+  // Composited animations only (transform / opacity): no forced layout per key.
   function animateStrike() {
-    lamp.classList.remove('hit');
-    void lamp.offsetWidth; // restart animation
-    lamp.classList.add('hit');
-    editorEl.classList.add('typing');
-    if (view === 'carriage') {
-      roll.classList.remove('jolt');
-      void roll.offsetWidth;
-      roll.classList.add('jolt');
-    }
+    if (!editorEl.classList.contains('typing')) editorEl.classList.add('typing');
+    jolt();
+    if (REDUCED_MOTION || view !== 'carriage') return;
+    lampHead.animate(HEAD_PRESS, { duration: 110, easing: 'ease-out' });
+    lampFlash.animate(FLASH, { duration: 180, easing: 'cubic-bezier(.2,.7,.3,1)' });
   }
 
   function ringBellIfNeeded(prevCol) {
@@ -424,9 +506,12 @@ export function mountEditor(root, { doc, navigate }) {
 
   function lockAtMargin() {
     sound.lock();
-    desk.classList.remove('shake');
-    void desk.offsetWidth;
-    desk.classList.add('shake');
+    if (!REDUCED_MOTION) {
+      stage.animate(
+        [{ translate: '0 0' }, { translate: '-2px 0' }, { translate: '2px 0' }, { translate: '-1px 0' }, { translate: '0 0' }],
+        { duration: 180, easing: 'ease-out' }
+      );
+    }
     if (!warnedMargin) {
       warnedMargin = true;
       toast('Carriage locked at the right margin — press Return.');
@@ -452,10 +537,12 @@ export function mountEditor(root, { doc, navigate }) {
       const line = lineAt(row);
       while (line.length < col) line.push(null);
       const cell = line[col] ? line[col] : [];
-      if (cell.length >= 8) cell.shift();
+      const shifted = cell.length >= 8;
+      if (shifted) cell.shift();
       cell.push([ch, settings.ink]);
       line[col] = cell;
-      paper.renderLine(row, line);
+      if (shifted) paper.renderLine(row, line);
+      else paper.strikeGlyph(row, col, cell.length - 1, ch, settings.ink, !REDUCED_MOTION && view === 'carriage');
       sound.key(/[A-Z#@%&$WM]/.test(ch));
       animateStrike();
       col++;
@@ -780,7 +867,7 @@ export function mountEditor(root, { doc, navigate }) {
       e.preventDefault();
       if (view === 'page') {
         scrollY = Math.max(0, Math.min(maxScroll(), scrollY + e.deltaY / geo.s));
-        place('none');
+        place('scroll');
         return;
       }
       wheelAcc += e.deltaY;
@@ -1048,6 +1135,7 @@ export function mountEditor(root, { doc, navigate }) {
       clearTimeout(queueTimer);
       closeLampPop();
       motes.stop();
+      cancelAnimationFrame(motionRaf);
       document.body.style.removeProperty('--lamp');
       document.body.style.removeProperty('--lamp-rgb');
       window.removeEventListener('resize', onResize);
