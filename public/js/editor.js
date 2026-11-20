@@ -73,7 +73,7 @@ export function mountEditor(root, { doc, navigate }) {
         <span class="ribbon"><i></i><i></i></span>
       </button>
       <button class="icon-btn lamp-btn" data-act="lamp" title="Lamp colour" aria-label="Lamp colour" aria-haspopup="dialog"><span class="lamp-swatch"></span></button>
-      <button class="icon-btn" data-act="sound" title="Sound" aria-label="Toggle sound"></button>
+      <button class="icon-btn" data-act="sound" title="Volume" aria-label="Volume" aria-haspopup="dialog"></button>
       <button class="icon-btn" data-act="zen" title="Zen mode (⌘/Ctrl + Enter)" aria-label="Zen mode">${icons.zen}</button>
       <button class="icon-btn" data-act="settings" title="Typewriter settings" aria-label="Typewriter settings">${icons.settings}</button>
       <button class="icon-btn" data-act="export" title="Export" aria-label="Export">${icons.download}</button>
@@ -359,7 +359,9 @@ export function mountEditor(root, { doc, navigate }) {
     desk.dataset.view = view;
     root.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === view)));
     root.querySelector('.ribbon-btn').dataset.ink = settings.ink ? 'red' : 'black';
-    root.querySelector('[data-act="sound"]').innerHTML = settings.sound ? icons.soundOn : icons.soundOff;
+    const audible = settings.sound && settings.volume > 0;
+    root.querySelector('[data-act="sound"]').innerHTML = !audible ? icons.soundOff : settings.volume < 0.4 ? icons.soundLow : icons.soundOn;
+    syncVolumeUi();
     root.querySelector('[data-k="mode"]').textContent =
       (settings.corrections === 'tape' ? 'Correction tape' : 'Purist — no erasing') +
       (settings.margin === 'wrap' ? ' · Auto-return' : ' · Margin lock');
@@ -473,6 +475,7 @@ export function mountEditor(root, { doc, navigate }) {
   }
   function openLampPop(anchor) {
     if (lampPop) { closeLampPop(); return focusKeys(); }
+    closeVolumePop();
     lampPop = document.createElement('div');
     lampPop.className = 'lamp-pop';
     lampPop.setAttribute('role', 'dialog');
@@ -493,6 +496,97 @@ export function mountEditor(root, { doc, navigate }) {
       document.addEventListener('keydown', onLampKey, true);
     });
     lampPop.querySelector('[aria-pressed="true"]')?.focus();
+  }
+
+  /* ---------------- volume: toolbar panel, slider, mute, Option+Left/Right ---------------- */
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  let volPop = null;
+  let previewAt = 0;
+
+  /** Preview a key at most every 120 ms so dragging the slider lets you hear the level. */
+  function previewKey() {
+    const t = performance.now();
+    if (t - previewAt < 120) return;
+    previewAt = t;
+    sound.key();
+  }
+
+  function syncVolumeUi() {
+    if (!volPop) return;
+    const muted = !settings.sound;
+    const input = volPop.querySelector('input');
+    if (Math.abs(Number(input.value) - settings.volume) > 0.001) input.value = String(settings.volume);
+    volPop.querySelector('.vol-pct').textContent = muted ? 'Muted' : pct(settings.volume);
+    const mb = volPop.querySelector('.vol-mute');
+    mb.textContent = muted ? 'Unmute' : 'Mute';
+    mb.setAttribute('aria-pressed', String(muted));
+    volPop.classList.toggle('muted', muted);
+  }
+
+  /** Change volume (0–1). Raising it while muted unmutes. */
+  function setVolume(v, { save = true, preview = true } = {}) {
+    const vol = Math.round(Math.min(1, Math.max(0, Number(v) || 0)) * 100) / 100;
+    const patch = { volume: vol };
+    if (vol > 0 && !settings.sound) patch.sound = true;
+    if (save) applySettings(patch);
+    else { sound.configure({ enabled: patch.sound ?? settings.sound, volume: vol }); }
+    if (preview && vol > 0) previewKey();
+    return vol;
+  }
+
+  function closeVolumePop() {
+    if (!volPop) return;
+    volPop.remove();
+    volPop = null;
+    document.removeEventListener('pointerdown', onVolOutside, true);
+    document.removeEventListener('keydown', onVolKey, true);
+  }
+  function onVolOutside(e) {
+    if (volPop && !volPop.contains(e.target) && !e.target.closest('[data-act="sound"]')) closeVolumePop();
+  }
+  function onVolKey(e) {
+    if (e.key === 'Escape') { e.stopPropagation(); closeVolumePop(); focusKeys(); }
+  }
+  function openVolumePop(anchor) {
+    if (volPop) { closeVolumePop(); return focusKeys(); }
+    closeLampPop();
+    volPop = document.createElement('div');
+    volPop.className = 'lamp-pop vol-pop';
+    volPop.setAttribute('role', 'dialog');
+    volPop.setAttribute('aria-label', 'Volume');
+    volPop.innerHTML = `
+      <div class="lamp-pop-head"><span>Sound</span><span class="vol-pct"></span></div>
+      <label class="vol-level"><span>Volume</span>
+        <input type="range" min="0" max="1" step="0.05" value="${settings.volume}" aria-label="Typing volume" />
+      </label>
+      <div class="vol-row">
+        <button type="button" class="vol-mute" aria-pressed="false">Mute</button>
+        <span class="lamp-keys">⌥ ← / ⌥ → while typing</span>
+      </div>`;
+    document.body.appendChild(volPop);
+    const r = anchor.getBoundingClientRect();
+    const w = volPop.offsetWidth;
+    volPop.style.top = `${r.bottom + 8}px`;
+    volPop.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+    const input = volPop.querySelector('input');
+    input.addEventListener('input', () => {
+      setVolume(input.value, { save: false });
+      volPop.querySelector('.vol-pct').textContent = pct(Number(input.value));
+    });
+    input.addEventListener('change', () => setVolume(input.value, { preview: false }));
+    volPop.querySelector('.vol-mute').addEventListener('click', () => {
+      if (settings.sound && settings.volume > 0) applySettings({ sound: false });
+      else {
+        applySettings({ sound: true, volume: settings.volume > 0 ? settings.volume : 0.5 });
+        previewKey();
+      }
+    });
+    syncVolumeUi();
+    setTimeout(() => {
+      document.addEventListener('pointerdown', onVolOutside, true);
+      document.addEventListener('keydown', onVolKey, true);
+    });
+    input.focus();
   }
 
   function renderAll() {
@@ -845,6 +939,13 @@ export function mountEditor(root, { doc, navigate }) {
       save();
       return;
     }
+    if (e.altKey && !mod && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      const base = settings.sound ? settings.volume : 0;
+      const vol = setVolume(base + (e.key === 'ArrowRight' ? 0.1 : -0.1));
+      toast(vol > 0 ? `Volume ${pct(vol)}` : 'Volume 0%', 900);
+      return;
+    }
     if (e.altKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
       e.preventDefault();
       const lv = setLampLevel((settings.lampLevel || 1) + (e.key === 'ArrowUp' ? 0.1 : -0.1));
@@ -1069,9 +1170,7 @@ export function mountEditor(root, { doc, navigate }) {
         toast(settings.ink ? 'Ribbon shifted to red' : 'Ribbon shifted to black');
         return focusKeys();
       case 'lamp': return openLampPop(b);
-      case 'sound':
-        applySettings({ sound: !settings.sound });
-        return focusKeys();
+      case 'sound': return openVolumePop(b);
       case 'settings': return openSettings();
       case 'zen': return enterZen();
       case 'share': return openShare();
@@ -1259,6 +1358,7 @@ export function mountEditor(root, { doc, navigate }) {
       destroyed = true;
       clearTimeout(queueTimer);
       closeLampPop();
+      closeVolumePop();
       motes.stop();
       cancelAnimationFrame(motionRaf);
       document.body.style.removeProperty('--lamp');
