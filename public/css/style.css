@@ -563,35 +563,6 @@ body.page-editor .icon-btn:hover { background: rgba(140,160,220,.1); }
 .lamp-level input[type="range"]:focus-visible { outline: 1px solid var(--lt); outline-offset: 4px; }
 .lamp-pop .lamp-keys { margin-top: 10px; font-family: var(--mono-ui); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--lt-dim); }
 
-/* Google Docs mirror: toolbar status and panel */
-.gdoc-state {
-  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; margin-left: 6px; cursor: pointer;
-  border: 1px solid var(--hair); background: transparent; color: var(--lt-dim);
-  font-family: var(--mono-ui); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap;
-}
-.gdoc-state:hover { color: var(--lt); border-color: var(--lt-dim); }
-.gdoc-state::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #5fa37a; }
-.gdoc-state[data-state="syncing"]::before { background: var(--lamp); animation: pulse 1s ease-in-out infinite; }
-.gdoc-state[data-state="error"] { color: #ff9a8c; border-color: rgba(255,120,100,.35); }
-.gdoc-state[data-state="error"]::before { background: #e0584a; }
-.gdoc-points { list-style: none; padding: 0; margin: 0 0 22px; display: grid; gap: 10px; font-size: 10px; line-height: 1.6; color: var(--lt-dim); }
-.gdoc-points li { padding-left: 16px; position: relative; }
-.gdoc-points li::before { content: '—'; position: absolute; left: 0; }
-.gdoc-status { margin: 0 0 18px; font-size: 10px; line-height: 1.6; color: var(--lt-dim); }
-.gdoc-status[data-state="on"] { color: #8fd3a8; }
-.gdoc-status[data-state="error"] { color: #ff9a8c; }
-.gdoc-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
-.gdoc-actions .btn svg { width: 14px; height: 14px; }
-body.page-editor .modal .btn-primary { background: var(--lt); border-color: var(--lt); color: var(--void); }
-body.page-editor .modal .btn-primary:hover { background: transparent; color: var(--lt); }
-body.page-editor .modal .arrow-link { color: var(--lt-dim); }
-.gdoc-note { margin: 20px 0 0 !important; font-size: 12px; }
-.gdoc-redirect { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--hair); display: grid; gap: 10px; }
-.gdoc-redirect > .mono { font-size: 10px; color: var(--lt-dim); }
-.gdoc-redirect .input { font-family: var(--mono-ui); font-size: 12px; }
-.gdoc-redirect p { margin: 0 !important; font-size: 12px; }
-@media (max-width: 900px) { .gdoc-state { display: none; } }
-
 /* ==========================================================================
    Paper & ink
    ========================================================================== */

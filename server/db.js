@@ -54,19 +54,6 @@ function createPgStore(connectionString) {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         CREATE INDEX IF NOT EXISTS documents_user_idx ON documents(user_id, updated_at DESC);
-        CREATE TABLE IF NOT EXISTS google_accounts (
-          user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          email TEXT,
-          refresh_token TEXT NOT NULL,
-          access_token TEXT,
-          access_expires_at TIMESTAMPTZ,
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-        ALTER TABLE documents ADD COLUMN IF NOT EXISTS gdoc_id TEXT;
-        ALTER TABLE documents ADD COLUMN IF NOT EXISTS gdoc_sync BOOLEAN NOT NULL DEFAULT false;
-        ALTER TABLE documents ADD COLUMN IF NOT EXISTS gdoc_state JSONB;
-        ALTER TABLE documents ADD COLUMN IF NOT EXISTS gdoc_synced_at TIMESTAMPTZ;
-        ALTER TABLE documents ADD COLUMN IF NOT EXISTS gdoc_error TEXT;
       `);
       await q('DELETE FROM sessions WHERE expires_at < now()');
     },
@@ -98,7 +85,7 @@ function createPgStore(connectionString) {
     },
     async listDocs(userId) {
       const { rows } = await q(
-        `SELECT id, title, preview, word_count, share_token IS NOT NULL AS shared, gdoc_sync, created_at, updated_at
+        `SELECT id, title, preview, word_count, share_token IS NOT NULL AS shared, created_at, updated_at
          FROM documents WHERE user_id = $1 ORDER BY updated_at DESC`,
         [userId]
       );
@@ -146,45 +133,6 @@ function createPgStore(connectionString) {
       );
       return rows[0] || null;
     },
-    async getGoogleAccount(userId) {
-      const { rows } = await q('SELECT * FROM google_accounts WHERE user_id = $1', [userId]);
-      return rows[0] || null;
-    },
-    async saveGoogleAccount(userId, f) {
-      await q(
-        `INSERT INTO google_accounts (user_id, email, refresh_token, access_token, access_expires_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5, now())
-         ON CONFLICT (user_id) DO UPDATE SET
-           email = COALESCE(EXCLUDED.email, google_accounts.email),
-           refresh_token = EXCLUDED.refresh_token,
-           access_token = EXCLUDED.access_token,
-           access_expires_at = EXCLUDED.access_expires_at,
-           updated_at = now()`,
-        [userId, f.email || null, f.refreshToken, f.accessToken || null, f.accessExpiresAt || null]
-      );
-    },
-    async deleteGoogleAccount(userId) {
-      await q('DELETE FROM google_accounts WHERE user_id = $1', [userId]);
-      await q('UPDATE documents SET gdoc_sync = false WHERE user_id = $1', [userId]);
-    },
-    /** Google mirror bookkeeping; deliberately does not touch updated_at. */
-    async updateDocGoogle(id, userId, f) {
-      const map = { gdocId: 'gdoc_id', gdocSync: 'gdoc_sync', gdocState: 'gdoc_state', gdocSyncedAt: 'gdoc_synced_at', gdocError: 'gdoc_error' };
-      const sets = [];
-      const params = [];
-      for (const [k, col] of Object.entries(map)) {
-        if (f[k] === undefined) continue;
-        params.push(k === 'gdocState' && f[k] !== null ? JSON.stringify(f[k]) : f[k]);
-        sets.push(`${col} = $${params.length}`);
-      }
-      if (!sets.length) return null;
-      params.push(id, userId);
-      const { rows } = await q(
-        `UPDATE documents SET ${sets.join(', ')} WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING *`,
-        params
-      );
-      return rows[0] || null;
-    },
     async getDocByShareToken(token) {
       const { rows } = await q(
         `SELECT d.*, u.name AS author FROM documents d JOIN users u ON u.id = d.user_id WHERE d.share_token = $1`,
@@ -199,7 +147,7 @@ function createPgStore(connectionString) {
 /* JSON file (local development)                                       */
 /* ------------------------------------------------------------------ */
 function createFileStore(file) {
-  let data = { users: [], sessions: [], documents: [], google: [] };
+  let data = { users: [], sessions: [], documents: [] };
   let writeTimer = null;
 
   const persist = () => {
@@ -214,14 +162,13 @@ function createFileStore(file) {
   const publicUser = (u) => u && { id: u.id, email: u.email, name: u.name, created_at: u.created_at };
   const summary = (d) => ({
     id: d.id, title: d.title, preview: d.preview, word_count: d.word_count,
-    shared: !!d.share_token, gdoc_sync: !!d.gdoc_sync, created_at: d.created_at, updated_at: d.updated_at,
+    shared: !!d.share_token, created_at: d.created_at, updated_at: d.updated_at,
   });
 
   return {
     kind: 'file',
     async init() {
       if (fs.existsSync(file)) data = JSON.parse(fs.readFileSync(file, 'utf8'));
-      data.google = data.google || [];
       const t = Date.now();
       data.sessions = data.sessions.filter((s) => new Date(s.expires_at).getTime() > t);
     },
@@ -277,33 +224,6 @@ function createFileStore(file) {
       const d = data.documents.find((x) => x.id === id && x.user_id === userId);
       if (!d) return null;
       d.share_token = token; persist();
-      return d;
-    },
-    async getGoogleAccount(userId) { return data.google.find((g) => g.user_id === userId) || null; },
-    async saveGoogleAccount(userId, f) {
-      let g = data.google.find((x) => x.user_id === userId);
-      if (!g) { g = { user_id: userId }; data.google.push(g); }
-      if (f.email) g.email = f.email;
-      g.refresh_token = f.refreshToken;
-      g.access_token = f.accessToken || null;
-      g.access_expires_at = f.accessExpiresAt ? new Date(f.accessExpiresAt).toISOString() : null;
-      g.updated_at = now();
-      persist();
-    },
-    async deleteGoogleAccount(userId) {
-      data.google = data.google.filter((g) => g.user_id !== userId);
-      data.documents.forEach((d) => { if (d.user_id === userId) d.gdoc_sync = false; });
-      persist();
-    },
-    async updateDocGoogle(id, userId, f) {
-      const d = data.documents.find((x) => x.id === id && x.user_id === userId);
-      if (!d) return null;
-      if (f.gdocId !== undefined) d.gdoc_id = f.gdocId;
-      if (f.gdocSync !== undefined) d.gdoc_sync = f.gdocSync;
-      if (f.gdocState !== undefined) d.gdoc_state = f.gdocState;
-      if (f.gdocSyncedAt !== undefined) d.gdoc_synced_at = f.gdocSyncedAt ? new Date(f.gdocSyncedAt).toISOString() : null;
-      if (f.gdocError !== undefined) d.gdoc_error = f.gdocError;
-      persist();
       return d;
     },
     async getDocByShareToken(token) {

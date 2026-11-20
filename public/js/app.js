@@ -231,7 +231,7 @@ async function showDocs() {
         <div class="doc-thumb"><p>${escapeHtml(d.preview || '')}</p></div>
         <div class="doc-meta">
           <div class="doc-title">${pad2(i + 1)} — <span class="t">${escapeHtml(d.title)}</span></div>
-          <div class="doc-sub"><span>${timeAgo(d.updatedAt)}</span><span>· ${d.wordCount} words</span>${d.shared ? `<span class="pill">· ${icons.link}Shared</span>` : ''}${d.googleSync ? `<span class="pill">· Google Docs</span>` : ''}</div>
+          <div class="doc-sub"><span>${timeAgo(d.updatedAt)}</span><span>· ${d.wordCount} words</span>${d.shared ? `<span class="pill">· ${icons.link}Shared</span>` : ''}</div>
         </div>
         <button class="icon-btn doc-more" aria-label="More actions">${icons.more}</button>
       </article>`

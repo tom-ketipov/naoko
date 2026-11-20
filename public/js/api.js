@@ -29,10 +29,6 @@ export const api = {
   deleteDoc: (id) => request('DELETE', `/api/docs/${id}`),
   share: (id, enabled) => request('POST', `/api/docs/${id}/share`, { enabled }),
   shared: (token) => request('GET', `/api/shared/${encodeURIComponent(token)}`),
-  googleStatus: () => request('GET', '/api/google/status'),
-  googleDoc: (id) => request('GET', `/api/docs/${id}/google`),
-  setGoogleSync: (id, enabled) => request('POST', `/api/docs/${id}/google`, { enabled }),
-  googleDisconnect: () => request('POST', '/api/google/disconnect'),
   async extractPdf(file) {
     const res = await fetch('/api/pdf/extract', {
       method: 'POST',

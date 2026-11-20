@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { sound } from './sound.js';
 import { icons } from './icons.js';
 import { Paper, CW, LH, MARGIN_COLS, withDefaults, linesToText, countWords, wrapText } from './paper.js';
-import { toast, modal, escapeHtml, menu, confirmDialog } from './ui.js';
+import { toast, modal, escapeHtml, menu } from './ui.js';
 
 const MAX_ROWS = 4999;
 const TAB = 5;
@@ -64,7 +64,6 @@ export function mountEditor(root, { doc, navigate }) {
       <a class="brand-sm" href="#/docs" aria-label="Naoko home">naoko</a>
       <input class="ed-title" maxlength="120" spellcheck="false" aria-label="Document title" value="${escapeHtml(title)}" />
       <span class="save-state" data-state="saved">Saved</span>
-      <button class="gdoc-state" data-act="google" data-state="off" hidden title="Google Docs mirror"></button>
       <div class="spacer"></div>
       <div class="seg" role="tablist" aria-label="View">
         <button data-view="carriage" role="tab">Carriage</button>
@@ -77,7 +76,6 @@ export function mountEditor(root, { doc, navigate }) {
       <button class="icon-btn" data-act="sound" title="Sound" aria-label="Toggle sound"></button>
       <button class="icon-btn" data-act="settings" title="Typewriter settings" aria-label="Typewriter settings">${icons.settings}</button>
       <button class="icon-btn" data-act="export" title="Export" aria-label="Export">${icons.download}</button>
-      <button class="icon-btn" data-act="google" title="Google Docs" aria-label="Google Docs">${icons.gdoc}</button>
       <button class="btn btn-primary btn-sm" data-act="share">${icons.share}<span>Share</span></button>
     </header>
     <main class="desk" data-view="carriage" tabindex="-1">
@@ -779,7 +777,6 @@ export function mountEditor(root, { doc, navigate }) {
     try {
       await api.saveDoc(doc.id, snapshot(), opts);
       if (!dirty) setSaveState('saved');
-      if (gstate.enabled) pollGoogle();
     } catch (e) {
       dirty = true;
       if (e.status === 401) {
@@ -1003,7 +1000,6 @@ export function mountEditor(root, { doc, navigate }) {
         return focusKeys();
       case 'settings': return openSettings();
       case 'share': return openShare();
-      case 'google': return openGoogle();
       case 'export': return openExport(b);
     }
   });
@@ -1060,185 +1056,6 @@ export function mountEditor(root, { doc, navigate }) {
       if (t.name === 'volume' || t.name === 'sound') sound.key();
     });
   }
-
-  /* ---------------- Google Docs mirror ---------------- */
-  let gstate = doc.google || { enabled: false };
-  let gpoll = [];
-  const gdocState = root.querySelector('.gdoc-state');
-  const ago = (iso) => {
-    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-    return s < 10 ? 'just now' : s < 60 ? `${Math.round(s)}s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  function renderGoogleState() {
-    const g = gstate;
-    gdocState.hidden = !g.enabled && !g.error;
-    let st = 'synced';
-    let label = 'Docs · synced';
-    if (g.error) { st = 'error'; label = 'Docs · error'; }
-    else if (g.pending || (dirty && g.enabled)) { st = 'syncing'; label = 'Docs · syncing'; }
-    else if (!g.syncedAt) { st = 'syncing'; label = 'Docs · syncing'; }
-    gdocState.dataset.state = st;
-    gdocState.textContent = label;
-    gdocState.title = g.error ? g.error : g.syncedAt ? `Mirrored to Google Docs ${ago(g.syncedAt)}` : 'Mirroring to Google Docs';
-    const panel = document.querySelector('.gdoc-panel');
-    if (panel) renderGooglePanelStatus(panel);
-  }
-
-  async function refreshGoogle() {
-    try {
-      const r = await api.googleDoc(doc.id);
-      gstate = r.google;
-      renderGoogleState();
-      return gstate;
-    } catch { return gstate; }
-  }
-
-  /** After a save, check back while the server mirrors (it waits ~2.5 s for a pause). */
-  function pollGoogle() {
-    gpoll.forEach(clearTimeout);
-    gstate.pending = true;
-    renderGoogleState();
-    gpoll = [3500, 7000, 15000].map((ms) => setTimeout(async () => {
-      const g = await refreshGoogle();
-      if (!g.pending) { gpoll.forEach(clearTimeout); gpoll = []; }
-    }, ms));
-  }
-
-  function renderGooglePanelStatus(panel) {
-    const el = panel.querySelector('.gdoc-status');
-    const open = panel.querySelector('.gdoc-open');
-    if (!el) return;
-    const g = gstate;
-    let txt;
-    if (g.error) txt = g.error;
-    else if (!g.enabled) txt = g.docId ? 'Paused. Turn it back on to continue mirroring into the same Google Doc.' : 'Off.';
-    else if (g.pending || !g.syncedAt) txt = 'Syncing…';
-    else txt = `Synced ${ago(g.syncedAt)}.`;
-    el.textContent = txt;
-    el.dataset.state = g.error ? 'error' : g.enabled ? 'on' : 'off';
-    if (open) {
-      open.hidden = !g.url;
-      if (g.url) open.href = g.url;
-    }
-  }
-
-  async function openGoogle() {
-    let status;
-    try { status = await api.googleStatus(); } catch (e) { return toast(e.message); }
-    await refreshGoogle();
-    let body;
-    // The exact address Google must list under "Authorized redirect URIs".
-    const redirectBlock = status.redirectUri
-      ? `<div class="gdoc-redirect">
-          <span class="mono">Redirect URI for Google Cloud</span>
-          <div class="share-row"><input class="input gdoc-redirect-uri" readonly value="${escapeHtml(status.redirectUri)}" aria-label="Redirect URI" />
-          <button class="btn gdoc-copy" type="button">${icons.copy}<span>Copy</span></button></div>
-          <p class="muted">If Google says <b>redirect_uri_mismatch</b>, add this exact address to your OAuth client under Authorized redirect URIs.</p>
-        </div>`
-      : '';
-    if (!status.configured) {
-      body = `<p class="muted">Google Docs sync isn't set up on this server yet. The server needs a Google OAuth client (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET). See the README for the steps.</p>${redirectBlock}`;
-    } else if (!status.connected) {
-      body = `
-        <p class="muted">Mirror this document into a real Google Doc in your Drive. As you type, the Google Doc follows a few seconds behind.</p>
-        <ul class="gdoc-points mono">
-          <li>Naoko only gets access to the Google Docs it creates — never the rest of your Drive.</li>
-          <li>Text, red ribbon and page breaks carry over. Overstrikes show the last letter typed.</li>
-          <li>Edits made directly in Google Docs are replaced by Naoko's version.</li>
-        </ul>
-        <div class="modal-actions"><a class="btn btn-primary gdoc-connect" href="/api/google/connect?doc=${doc.id}"><span>Connect Google Drive</span><span aria-hidden="true">→</span></a></div>
-        ${redirectBlock}`;
-    } else {
-      body = `
-        <p class="muted">Connected as <b>${escapeHtml(status.email || 'your Google account')}</b>.</p>
-        <label class="switch big"><input type="checkbox" class="gdoc-toggle" ${gstate.enabled ? 'checked' : ''}/><span>Mirror to Google Docs</span></label>
-        <p class="gdoc-status mono" aria-live="polite"></p>
-        <div class="gdoc-actions">
-          <a class="btn btn-primary gdoc-open" target="_blank" rel="noopener" hidden><span>Open in Google Docs</span>${icons.external}</a>
-          <button class="arrow-link gdoc-disconnect" type="button">Disconnect Google</button>
-        </div>
-        <p class="gdoc-note muted">Naoko is the master copy. Edits made in Google Docs are replaced on the next sync.</p>`;
-    }
-    const m = modal(`<h2>Google Docs</h2><div class="gdoc-panel">${body}</div>`, { onClose: focusKeys });
-    const panel = m.el.querySelector('.gdoc-panel');
-    renderGooglePanelStatus(panel);
-    const copyBtn = panel.querySelector('.gdoc-copy');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', async () => {
-        const input = panel.querySelector('.gdoc-redirect-uri');
-        try {
-          await navigator.clipboard.writeText(input.value);
-          toast('Redirect URI copied');
-        } catch {
-          input.select();
-        }
-      });
-    }
-    const connect = panel.querySelector('.gdoc-connect');
-    if (connect) {
-      connect.addEventListener('click', async (e) => {
-        e.preventDefault();
-        if (dirty) await save();
-        location.href = connect.getAttribute('href');
-      });
-    }
-    const toggle = panel.querySelector('.gdoc-toggle');
-    if (toggle) {
-      toggle.addEventListener('change', async () => {
-        toggle.disabled = true;
-        if (toggle.checked) { gstate = { ...gstate, enabled: true, pending: true, error: null }; renderGoogleState(); }
-        try {
-          if (dirty) await save();
-          const r = await api.setGoogleSync(doc.id, toggle.checked);
-          gstate = r.google;
-          renderGoogleState();
-          if (gstate.enabled && !gstate.error) toast('Mirroring to Google Docs');
-        } catch (e) {
-          toggle.checked = !toggle.checked;
-          toast(e.message, 4000);
-          await refreshGoogle();
-        } finally {
-          toggle.disabled = false;
-        }
-      });
-    }
-    const disc = panel.querySelector('.gdoc-disconnect');
-    if (disc) {
-      disc.addEventListener('click', async () => {
-        const ok = await confirmDialog({
-          title: 'Disconnect Google?',
-          body: 'Naoko stops mirroring all your documents and gives up access to Google Drive. The Google Docs it created stay in your Drive.',
-          confirm: 'Disconnect',
-          danger: true,
-        });
-        if (!ok) return;
-        try {
-          await api.googleDisconnect();
-          m.close();
-          await refreshGoogle();
-          toast('Google Drive disconnected');
-        } catch (e) { toast(e.message); }
-      });
-    }
-  }
-
-  /* Coming back from Google's consent screen: /#/d/<id>?google=<result> */
-  (function handleGoogleReturn() {
-    const mres = location.hash.match(/[?&]google=(\w+)/);
-    if (!mres) return;
-    history.replaceState(null, '', location.pathname + location.hash.replace(/\?.*$/, ''));
-    const msg = {
-      connected: 'Google Drive connected — mirroring this document to Google Docs.',
-      denied: 'Google access was not granted.',
-      scope: 'Naoko needs permission to create Google Docs to mirror this document.',
-      failed: 'Connecting to Google failed. Please try again.',
-      expired: 'That Google sign-in expired. Please try again.',
-      unconfigured: "Google Docs sync isn't set up on this server yet.",
-    }[mres[1]];
-    if (msg) setTimeout(() => toast(msg, 4200), 400);
-    if (mres[1] === 'connected') setTimeout(() => { refreshGoogle(); openGoogle(); }, 700);
-  })();
 
   async function openShare() {
     const linkFor = (tok) => `${location.origin}/#/s/${tok}`;
@@ -1357,8 +1174,6 @@ export function mountEditor(root, { doc, navigate }) {
     focusKeys();
     document.fonts && document.fonts.ready.then(() => !destroyed && place('none'));
   });
-  renderGoogleState();
-  const gTicker = setInterval(() => { if (gstate.enabled && !document.hidden) renderGoogleState(); }, 15000);
   if (!localStorage.getItem('naoko:welcomed')) {
     try { localStorage.setItem('naoko:welcomed', '1'); } catch { /* ignore */ }
     setTimeout(() => toast('Just start typing. Listen for the bell near the margin.'), 600);
@@ -1371,8 +1186,6 @@ export function mountEditor(root, { doc, navigate }) {
       closeLampPop();
       motes.stop();
       cancelAnimationFrame(motionRaf);
-      gpoll.forEach(clearTimeout);
-      clearInterval(gTicker);
       document.body.style.removeProperty('--lamp');
       document.body.style.removeProperty('--lamp-rgb');
       document.body.style.removeProperty('--lv');
