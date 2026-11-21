@@ -4,6 +4,7 @@ import { sound } from './sound.js';
 import { icons } from './icons.js';
 import { Paper, CW, LH, MARGIN_COLS, withDefaults, linesToText, countWords, wrapText } from './paper.js';
 import { toast, modal, escapeHtml, menu } from './ui.js';
+import { machineSvg } from './machine.js';
 
 const MAX_ROWS = 4999;
 const TAB = 5;
@@ -12,6 +13,7 @@ const PAGE_TOP = 72; // clear the floating toolbar in page view
 const SENTINEL = '​​';
 
 export const LAMP_PRESETS = [
+  ['#ffe8b8', 'Warm white'],
   ['#7d9bff', 'Moonlight'],
   ['#ffb766', 'Tungsten'],
   ['#ff8a3d', 'Candle'],
@@ -85,6 +87,7 @@ export function mountEditor(root, { doc, navigate }) {
           <div class="roll"><div class="sheets"></div><div class="caret"></div></div>
           <div class="scale"></div>
         </div>
+        <div class="machine" aria-hidden="true">${machineSvg()}<div class="machine-glow"></div><div class="machine-glint"></div></div>
         <div class="rail"></div>
         <div class="lamp" aria-hidden="true">
           <div class="lamp-falloff"></div>
@@ -120,6 +123,7 @@ export function mountEditor(root, { doc, navigate }) {
   const editorEl = $('.editor');
   const scaleEl = $('.scale');
   const rail = $('.rail');
+  const machine = $('.machine');
   const lamp = $('.lamp');
   const keys = $('.keys');
   const titleInput = $('.ed-title');
@@ -140,7 +144,7 @@ export function mountEditor(root, { doc, navigate }) {
     ctx.scale(dpr, dpr);
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const SPREAD = Math.tan((38 * Math.PI) / 180); // matches the wider, feathered beam
-    let rgb = [125, 155, 255];
+    let rgb = [255, 232, 184];
     let level = 1;
     let raf = 0;
     let last = 0;
@@ -234,6 +238,8 @@ export function mountEditor(root, { doc, navigate }) {
     scaleEl.style.top = `${sy + 10}px`;
     lamp.style.left = `${sx}px`;
     lamp.style.top = `${sy + 14}px`;
+    machine.style.left = `${sx}px`;
+    machine.style.top = `${sy + 16}px`;
     buildScale();
   }
 
@@ -418,7 +424,7 @@ export function mountEditor(root, { doc, navigate }) {
   }
 
   function applyLamp(hex) {
-    if (!HEX_RE.test(hex || '')) hex = '#7d9bff';
+    if (!HEX_RE.test(hex || '')) hex = '#ffe8b8';
     const n = parseInt(hex.slice(1), 16);
     document.body.style.setProperty('--lamp', hex);
     document.body.style.setProperty('--lamp-rgb', `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`);
@@ -629,6 +635,8 @@ export function mountEditor(root, { doc, navigate }) {
 
   const lampHead = root.querySelector('.lamp-head');
   const lampFlash = root.querySelector('.lamp-flash');
+  const machineGlint = root.querySelector('.machine-glint');
+  const GLINT = [{ opacity: 1 }, { opacity: 0 }];
   const HEAD_PRESS = [
     { transform: 'translateY(0)' },
     { transform: 'translateY(1.5px)', offset: 0.35 },
@@ -642,6 +650,7 @@ export function mountEditor(root, { doc, navigate }) {
     if (REDUCED_MOTION || view !== 'carriage') return;
     lampHead.animate(HEAD_PRESS, { duration: 110, easing: 'ease-out' });
     lampFlash.animate(FLASH, { duration: 180, easing: 'cubic-bezier(.2,.7,.3,1)' });
+    machineGlint.animate(GLINT, { duration: 260, easing: 'cubic-bezier(.2,.7,.3,1)' });
   }
 
   function ringBellIfNeeded(prevCol) {

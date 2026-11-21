@@ -277,8 +277,8 @@ body.page-editor {
   --hair: rgba(150, 170, 220, .14);
   --lt: #d7deef;            /* lit text */
   --lt-dim: #7e889e;        /* chrome text */
-  --lamp: #7d9bff;           /* overridden live by the lamp colour picker */
-  --lamp-rgb: 125, 155, 255;
+  --lamp: #ffe8b8;           /* overridden live by the lamp colour picker */
+  --lamp-rgb: 255, 232, 184;
   --lv: 1;                   /* lamp intensity, 0.25–1.75, set by the light slider */
   --lamp-2: color-mix(in srgb, var(--lamp) 68%, #000);
   --lamp-hi: color-mix(in srgb, var(--lamp) 55%, #fff);
@@ -476,6 +476,43 @@ body.page-editor {
   background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(var(--lamp-rgb), calc(.6 * var(--lv))), rgba(var(--lamp-rgb), calc(.15 * var(--lv))) 45%, transparent 72%);
   mix-blend-mode: screen; will-change: opacity;
 }
+
+/*
+ * The typewriter in the foreground, out of focus like a shallow depth of field:
+ * dark metal that only shows where the lamp catches it, with soft bokeh glints.
+ */
+.machine {
+  position: absolute; width: 0; height: 0; z-index: 6; pointer-events: none;
+  opacity: calc(.42 + .3 * var(--lv)); transition: opacity .4s;
+}
+.machine-svg {
+  position: absolute; left: -500px; top: 0; display: block; overflow: visible;
+  filter: blur(6px);
+  -webkit-mask-image: radial-gradient(ellipse 52% 100% at 50% 0%, #000 45%, transparent 98%);
+  mask-image: radial-gradient(ellipse 52% 100% at 50% 0%, #000 45%, transparent 98%);
+}
+.machine-svg .m-guide { fill: var(--lamp-hi-2); }
+.machine-svg .m-glints { fill: var(--lamp-hi-2); }
+.machine-svg .m-glints circle { filter: drop-shadow(0 0 6px var(--lamp)); }
+/* lamp light pooling on the machine just under the bulb */
+.machine-glow, .machine-glint { position: absolute; pointer-events: none; mix-blend-mode: screen; }
+.machine-glow {
+  left: -420px; top: -10px; width: 840px; height: 380px;
+  background: radial-gradient(ellipse 50% 60% at 50% 0%,
+    rgba(var(--lamp-rgb), calc(.2 * var(--lv))) 0%,
+    rgba(var(--lamp-rgb), calc(.08 * var(--lv))) 35%,
+    rgba(var(--lamp-rgb), calc(.02 * var(--lv))) 65%,
+    transparent 100%);
+  filter: blur(10px);
+  animation: flicker 4.3s linear infinite;
+}
+/* each strike glints off the type bars */
+.machine-glint {
+  left: -170px; top: -6px; width: 340px; height: 170px; opacity: 0; will-change: opacity;
+  background: radial-gradient(ellipse 50% 55% at 50% 10%, rgba(var(--lamp-rgb), calc(.38 * var(--lv))), rgba(var(--lamp-rgb), calc(.1 * var(--lv))) 45%, transparent 75%);
+  filter: blur(6px);
+}
+.desk[data-view="page"] .machine { opacity: 0; }
 
 /* fine film grain stops the dark gradients from banding */
 .desk::after {
@@ -761,7 +798,7 @@ body.page-shared { background: var(--black); }
 }
 @media (prefers-reduced-motion: reduce) {
   .carriage, .roll { transition: none !important; }
-  .lamp-cone, .lamp-tint, .lamp-bloom, .lamp-ambient { animation: none; }
+  .lamp-cone, .lamp-tint, .lamp-bloom, .lamp-ambient, .machine-glow { animation: none; }
   .lamp-motes { display: none; }
 }
 

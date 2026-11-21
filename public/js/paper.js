@@ -18,7 +18,7 @@ export const DEFAULTS = {
   volume: 0.6,
   corrections: 'none',
   margin: 'lock',
-  lamp: '#7d9bff',
+  lamp: '#ffe8b8',
   lampLevel: 1,
 };
 
